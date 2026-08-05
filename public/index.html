@@ -115,7 +115,7 @@
     };
 
     const DEFAULT_USERS = [
-      { id: '99999', name: '系統管理者', role: 'admin', dept: '行政科', ext: '101', mustChangePassword: false }
+      { id: '99999', name: '超級管理員', role: 'superadmin', dept: '行政科', ext: '101', mustChangePassword: false }
     ];
 
     const TIME_PRESETS = [
@@ -492,7 +492,7 @@
 
     const canModifyReservation = (res) => {
       if (!currentUser) return false;
-      if (currentUser.role === 'admin') return true;
+      if (currentUser.role === 'admin' || currentUser.role === 'superadmin') return true;
       return res.userId === currentUser.id;
     };
 
@@ -720,10 +720,10 @@ END:VCALENDAR`;
                   <span class="font-bold text-slate-200">${escapeHtml(currentUser.dept)} - ${escapeHtml(currentUser.name)}</span>
                   <span class="text-slate-400 text-[11px] font-mono">(${escapeHtml(currentUser.id)})</span>
                 </div>
-                ${currentUser.role === 'admin' ? '<span class="bg-purple-900/90 text-purple-200 text-[10px] px-2.5 py-0.5 rounded-lg border border-purple-700 font-extrabold flex items-center gap-1 shadow-xs"><i data-lucide="shield-check" class="w-3 h-3 text-purple-300"></i> 最高管理者</span>' : ''}
+                ${currentUser.role === 'superadmin' ? '<span class="bg-amber-500 text-white text-[10px] px-2.5 py-0.5 rounded-lg font-extrabold flex items-center gap-1 shadow-xs"><i data-lucide="shield-check" class="w-3 h-3 text-amber-200"></i> 超級管理員</span>' : currentUser.role === 'admin' ? '<span class="bg-purple-900/90 text-purple-200 text-[10px] px-2.5 py-0.5 rounded-lg border border-purple-700 font-extrabold flex items-center gap-1 shadow-xs"><i data-lucide="shield" class="w-3 h-3 text-purple-300"></i> 管理者</span>' : ''}
               </div>
 
-              ${currentUser.role === 'admin' ? `
+              ${(currentUser.role === 'admin' || currentUser.role === 'superadmin') ? `
                 <button onclick="openAdminConsole()" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-purple-600/20">
                   <i data-lucide="settings" class="w-3.5 h-3.5"></i>
                   <span>管理者控制台</span>
@@ -1760,7 +1760,7 @@ END:VCALENDAR`;
       }
 
       // 3F. 管理者控制台 Modal
-      if (activeModal === 'ADMIN' && currentUser.role === 'admin') {
+      if (activeModal === 'ADMIN' && (currentUser.role === 'admin' || currentUser.role === 'superadmin')) {
         const editingUserObj = adminEditingUserId ? users.find(u => u.id === adminEditingUserId) : null;
         const editingRoomObj = adminEditingRoomId ? rooms.find(r => r.id === adminEditingRoomId) : null;
         const editingDeptObj = adminEditingDeptName ? departments.find(d => d.name === adminEditingDeptName) : null;
@@ -1833,7 +1833,8 @@ END:VCALENDAR`;
                           <label class="block font-bold text-slate-600 mb-1">帳號權限</label>
                           <select id="adminUserRole" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold">
                             <option value="staff" ${editingUserObj && editingUserObj.role === 'staff' ? 'selected' : ''}>一般帳號</option>
-                            <option value="admin" ${editingUserObj && editingUserObj.role === 'admin' ? 'selected' : ''}>最高管理者</option>
+                            <option value="admin" ${editingUserObj && editingUserObj.role === 'admin' ? 'selected' : ''}>管理者</option>
+                            ${currentUser.role === 'superadmin' ? `<option value="superadmin" ${editingUserObj && editingUserObj.role === 'superadmin' ? 'selected' : ''}>超級管理員</option>` : ''}
                           </select>
                         </div>
                         <div>
@@ -1868,25 +1869,42 @@ END:VCALENDAR`;
                           </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
-                          ${users.map(u => `
-                            <tr class="hover:bg-slate-50">
-                              <td class="p-3 font-mono font-bold">${u.id}</td>
-                              <td class="p-3 font-bold text-slate-800">${escapeHtml(u.name)}</td>
-                              <td class="p-3">${escapeHtml(u.dept)}</td>
-                              <td class="p-3 font-mono">${escapeHtml(u.ext)}</td>
-                              <td class="p-3">
-                                ${u.role === 'admin' ? '<span class="bg-purple-100 text-purple-800 font-extrabold px-2 py-0.5 rounded text-[10px]">管理者</span>' : '<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px]">一般同仁</span>'}
-                              </td>
-                              <td class="p-3">
-                                <span class="text-slate-400 font-mono text-[11px] bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200" title="原密碼已受加密保護，無法直接點閱">•••••••• (受保護)</span>
-                              </td>
-                              <td class="p-3 text-right space-x-1">
-                                <button onclick="startAdminUserEdit('${u.id}')" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="修改資料"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                                <button onclick="openAdminResetPasswordPrompt('${u.id}')" class="px-2.5 py-1 text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg font-bold transition inline-flex items-center gap-1" title="管理者重置忘記之密碼"><i data-lucide="key" class="w-3.5 h-3.5"></i> 重置密碼</button>
-                                <button onclick="deleteAdminUser('${u.id}')" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg" title="刪除帳號"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                              </td>
-                            </tr>
-                          `).join('')}
+                          ${users.map(u => {
+                            const isTargetSuper = u.role === 'superadmin' || u.id === '99999';
+                            const isCallerSuper = currentUser.role === 'superadmin';
+                            const isProtected = isTargetSuper && !isCallerSuper;
+
+                            let roleBadge = '<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px]">一般同仁</span>';
+                            if (isTargetSuper) {
+                              roleBadge = '<span class="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-[10px] inline-flex items-center gap-0.5"><i data-lucide="shield-check" class="w-3 h-3 text-amber-600"></i> 超級管理員</span>';
+                            } else if (u.role === 'admin') {
+                              roleBadge = '<span class="bg-purple-100 text-purple-800 font-extrabold px-2 py-0.5 rounded text-[10px]">管理者</span>';
+                            }
+
+                            return `
+                              <tr class="hover:bg-slate-50">
+                                <td class="p-3 font-mono font-bold">${u.id}</td>
+                                <td class="p-3 font-bold text-slate-800">${escapeHtml(u.name)}</td>
+                                <td class="p-3">${escapeHtml(u.dept)}</td>
+                                <td class="p-3 font-mono">${escapeHtml(u.ext)}</td>
+                                <td class="p-3">${roleBadge}</td>
+                                <td class="p-3">
+                                  <span class="text-slate-400 font-mono text-[11px] bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200" title="原密碼已受加密保護，無法直接點閱">•••••••• (受保護)</span>
+                                </td>
+                                <td class="p-3 text-right space-x-1">
+                                  ${isProtected ? `
+                                    <span class="text-slate-400 font-bold text-[11px] bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 inline-flex items-center gap-1" title="超級管理員帳號，一般管理者無法更動">
+                                      <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-600"></i> 系統保護 (無法更動)
+                                    </span>
+                                  ` : `
+                                    <button onclick="startAdminUserEdit('${u.id}')" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="修改資料"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                    <button onclick="openAdminResetPasswordPrompt('${u.id}')" class="px-2.5 py-1 text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg font-bold transition inline-flex items-center gap-1" title="管理者重置忘記之密碼"><i data-lucide="key" class="w-3.5 h-3.5"></i> 重置密碼</button>
+                                    ${isTargetSuper ? '' : `<button onclick="deleteAdminUser('${u.id}')" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg" title="刪除帳號"><i data-lucide="trash-2" class="w-4 h-4"></i></button>`}
+                                  `}
+                                </td>
+                              </tr>
+                            `;
+                          }).join('')}
                         </tbody>
                       </table>
                     </div>
@@ -2466,6 +2484,13 @@ END:VCALENDAR`;
 
     // 管理者 - 帳號 CRUD
     window.startAdminUserEdit = (userId) => {
+      const targetUser = users.find(u => u.id === userId);
+      const isTargetSuper = targetUser && (targetUser.role === 'superadmin' || targetUser.id === '99999');
+      const isCallerSuper = currentUser && currentUser.role === 'superadmin';
+      if (isTargetSuper && !isCallerSuper) {
+        showToast('保護機制：一般管理者無權更動超級管理員帳號！', 'error');
+        return;
+      }
       adminEditingUserId = userId;
       render();
     };
@@ -2484,10 +2509,23 @@ END:VCALENDAR`;
       const role = document.getElementById('adminUserRole').value;
       const newPw = document.getElementById('adminUserPassword') ? document.getElementById('adminUserPassword').value.trim() : '';
 
+      const isCallerSuper = currentUser && currentUser.role === 'superadmin';
+      if (role === 'superadmin' && !isCallerSuper) {
+        showToast('保護機制：一般管理者無權指派超級管理員權限！', 'error');
+        return;
+      }
+
       const deptObj = departments.find(d => d.name === dept);
       const defaultPw = deptObj ? deptObj.phone : '03-5355100';
 
       if (adminEditingUserId) {
+        const targetUser = users.find(u => u.id === adminEditingUserId);
+        const isTargetSuper = targetUser && (targetUser.role === 'superadmin' || targetUser.id === '99999');
+        if (isTargetSuper && !isCallerSuper) {
+          showToast('保護機制：一般管理者無權修改超級管理員資料！', 'error');
+          return;
+        }
+
         users = users.map(u => {
           if (u.id === adminEditingUserId) {
             const updatedUser = { ...u, name, dept, ext, role };
@@ -2524,8 +2562,10 @@ END:VCALENDAR`;
     };
 
     window.deleteAdminUser = (userId) => {
-      if (userId === '99999') {
-        showToast('保護機制：無法刪除主要管理者帳號！', 'error');
+      const targetUser = users.find(u => u.id === userId);
+      const isTargetSuper = targetUser && (targetUser.role === 'superadmin' || targetUser.id === '99999');
+      if (isTargetSuper) {
+        showToast('保護機制：無法刪除超級管理員帳號！', 'error');
         return;
       }
       showConfirmModal('刪除帳號確認', `確定要刪除工號 ${userId} 的使用者帳號嗎？`, () => {
@@ -2539,6 +2579,13 @@ END:VCALENDAR`;
     window.openAdminResetPasswordPrompt = (userId) => {
       const u = users.find(x => x.id === userId);
       if (!u) return;
+
+      const isTargetSuper = u.role === 'superadmin' || u.id === '99999';
+      const isCallerSuper = currentUser && currentUser.role === 'superadmin';
+      if (isTargetSuper && !isCallerSuper) {
+        showToast('保護機制：一般管理者無權重置超級管理員密碼！', 'error');
+        return;
+      }
 
       const deptObj = departments.find(d => d.name === u.dept);
       const defaultPw = deptObj ? deptObj.phone : '03-5355100';

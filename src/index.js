@@ -1,14 +1,11 @@
-const JWT_SECRET = 'hc_health_jwt_secret_key_2026_v1!';
-
 // 預設使用者清單（當 KV 尚無資料時初始化使用）
 const DEFAULT_USERS = [
-  { id: '99999', name: '系統管理者', role: 'admin', dept: '行政科', ext: '101', password: 'admin', mustChangePassword: false }
+  { id: '99999', name: '超級管理員', role: 'superadmin', dept: '行政科', ext: '101', password: 'admin', mustChangePassword: false }
 ];
 
 // SHA-256 密碼雜湊與加鹽
 async function hashPassword(password) {
   if (!password) return '';
-  if (/^[a-f0-9]{64}$/i.test(password)) return password;
   const msgBuffer = new TextEncoder().encode(password + '_hc_health_salt_v1');
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -60,7 +57,7 @@ function base64UrlDecode(str) {
 }
 
 // 簽發 JWT Token (過期時間 8 小時)
-async function generateToken(payload) {
+async function generateToken(payload, jwtSecret) {
   const header = { alg: 'HS256', typ: 'JWT' };
   const now = Math.floor(Date.now() / 1000);
   const fullPayload = { ...payload, iat: now, exp: now + 8 * 3600 };
@@ -71,7 +68,7 @@ async function generateToken(payload) {
   const dataToSign = `${encodedHeader}.${encodedPayload}`;
   const key = await crypto.subtle.importKey(
     'raw',
-    new TextEncoder().encode(JWT_SECRET),
+    new TextEncoder().encode(jwtSecret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
@@ -89,7 +86,7 @@ async function generateToken(payload) {
 }
 
 // 驗證 JWT Token
-async function verifyToken(token) {
+async function verifyToken(token, jwtSecret) {
   if (!token || typeof token !== 'string') return null;
   const parts = token.split('.');
   if (parts.length !== 3) return null;
@@ -100,7 +97,7 @@ async function verifyToken(token) {
 
     const key = await crypto.subtle.importKey(
       'raw',
-      new TextEncoder().encode(JWT_SECRET),
+      new TextEncoder().encode(jwtSecret),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['verify']
@@ -124,12 +121,19 @@ async function verifyToken(token) {
   }
 }
 
-// 動態 CORS Headers Helper
+// 動態 CORS Headers Helper (白名單機制)
 function getCorsHeaders(request) {
-  const origin = request ? (request.headers.get('Origin') || '*') : '*';
+  const allowedOrigins = [
+    'https://meeting-room-booking-system.71658.workers.dev'
+  ];
+  const origin = request ? (request.headers.get('Origin') || '') : '';
+  let matchedOrigin = allowedOrigins[0];
+  if (allowedOrigins.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    matchedOrigin = origin;
+  }
   return {
     'content-type': 'application/json;charset=UTF-8',
-    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Origin': matchedOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Credentials': 'true'
@@ -153,6 +157,7 @@ function sanitizeAppData(data) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const jwtSecret = env.JWT_SECRET || 'hc_health_jwt_secret_key_2026_v1!';
 
     // 處理 CORS OPTIONS 預檢
     if (request.method === 'OPTIONS') {
@@ -222,10 +227,17 @@ export default {
           await env.MEETING_DB.put('all_app_data', JSON.stringify(appData));
         }
 
+        // 確保 99999 固定為超級管理員權限
+        const superAdminUser = users.find(u => u.id === '99999');
+        if (superAdminUser && superAdminUser.role !== 'superadmin') {
+          superAdminUser.role = 'superadmin';
+          superAdminUser.name = '超級管理員';
+        }
+
         const user = users.find(u => u.id === id);
         const inputHash = await hashPassword(password);
 
-        if (!user || inputHash !== await hashPassword(user.password)) {
+        if (!user || inputHash !== user.password) {
           // 增加登入失敗次數
           failRecord.count = (failRecord.count || 0) + 1;
           if (failRecord.count >= 5) {
@@ -247,7 +259,7 @@ export default {
         await env.MEETING_DB.delete(lockKey);
 
         const { password: _, ...safeUser } = user;
-        const token = await generateToken({ id: safeUser.id, role: safeUser.role, dept: safeUser.dept });
+        const token = await generateToken({ id: safeUser.id, role: safeUser.role, dept: safeUser.dept }, jwtSecret);
 
         return new Response(JSON.stringify({ success: true, token, user: safeUser }), {
           headers: getCorsHeaders(request)
@@ -265,6 +277,14 @@ export default {
       try {
         const dataStr = await env.MEETING_DB.get('all_app_data');
         const rawData = dataStr ? JSON.parse(dataStr) : {};
+        
+        // 確保返回的 99999 資料永遠為 superadmin
+        const userKey = 'hc_health_users_v5';
+        if (Array.isArray(rawData[userKey])) {
+          const sa = rawData[userKey].find(u => u.id === '99999');
+          if (sa && sa.role !== 'superadmin') sa.role = 'superadmin';
+        }
+
         const safeData = sanitizeAppData(rawData);
 
         return new Response(JSON.stringify(safeData), {
@@ -283,7 +303,7 @@ export default {
       try {
         const authHeader = request.headers.get('Authorization') || '';
         const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
-        const userPayload = await verifyToken(token);
+        const userPayload = await verifyToken(token, jwtSecret);
 
         if (!userPayload) {
           return new Response(JSON.stringify({ success: false, message: '未授權的操作或登入逾時，請重新登入！' }), {
@@ -300,7 +320,43 @@ export default {
         const oldUsersMap = new Map((oldData['hc_health_users_v5'] || []).map(u => [u.id, u]));
 
         const userKey = 'hc_health_users_v5';
+        const isCallerSuperAdmin = userPayload.role === 'superadmin' || userPayload.id === '99999';
+
         if (Array.isArray(incomingData[userKey])) {
+          // 防護機制：一般管理者無法更動或刪除超級管理員帳號
+          if (!isCallerSuperAdmin) {
+            const incomingMap = new Map(incomingData[userKey].map(u => [u.id, u]));
+
+            // 1. 拒絕一般管理者將任何使用者權限提升為 superadmin
+            for (const u of incomingData[userKey]) {
+              const oldU = oldUsersMap.get(u.id);
+              const oldRole = oldU ? oldU.role : 'staff';
+              if (u.role === 'superadmin' && oldRole !== 'superadmin') {
+                u.role = oldRole;
+              }
+            }
+
+            // 2. 保護既有超級管理員帳號不被非超級管理員刪除或竄改
+            for (const [oldId, oldU] of oldUsersMap.entries()) {
+              if (oldU.role === 'superadmin' || oldId === '99999') {
+                const incU = incomingMap.get(oldId);
+                if (!incU) {
+                  // 若被企圖刪除，強制加回超級管理員
+                  incomingData[userKey].push(oldU);
+                } else {
+                  // 強制恢復超級管理員權限與重要資料
+                  incU.role = 'superadmin';
+                  incU.name = oldU.name || '超級管理員';
+                  incU.id = oldId;
+                  if (!incU.password || incU.password.trim() === '') {
+                    incU.password = oldU.password;
+                  }
+                }
+              }
+            }
+          }
+
+          // 處理密碼雜湊
           for (let i = 0; i < incomingData[userKey].length; i++) {
             const u = incomingData[userKey][i];
             const oldU = oldUsersMap.get(u.id);
