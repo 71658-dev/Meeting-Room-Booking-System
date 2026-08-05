@@ -1,6 +1,4 @@
 const JWT_SECRET = 'hc_health_jwt_secret_key_2026_v1!';
-// Cloudflare Turnstile 免費測試 Secret Key (可於 Cloudflare Dashboard 替換為正式金鑰或經由 env.TURNSTILE_SECRET_KEY 傳入)
-const TURNSTILE_SECRET_KEY = '1x0000000000000000000000000000000AA';
 
 // 預設使用者清單（當 KV 尚無資料時初始化使用）
 const DEFAULT_USERS = [
@@ -176,8 +174,15 @@ export default {
           });
         }
 
-        // 防機器人 Turnstile 驗證 (使用 env.TURNSTILE_SECRET)
-        const secretKey = env.TURNSTILE_SECRET || '0x4AAAAAAEGpkae1Cr3V76i3m7ooE9pys1I';
+        // 防機器人 Turnstile 驗證 (由 Worker 加密環境變數 env.TURNSTILE_SECRET 讀取)
+        const secretKey = env.TURNSTILE_SECRET;
+        if (!secretKey) {
+          console.error('Missing TURNSTILE_SECRET environment variable.');
+          return new Response(JSON.stringify({ success: false, message: '伺服器端未設定防機器人安全金鑰！' }), {
+            status: 500,
+            headers: getCorsHeaders(request)
+          });
+        }
         const isHuman = await verifyTurnstileToken(turnstileToken, secretKey, clientIP);
 
         if (!isHuman) {

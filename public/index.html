@@ -209,14 +209,20 @@
       rooms = loadStorage(STORAGE_KEYS.ROOMS, DEFAULT_ROOMS);
       users = loadStorage(STORAGE_KEYS.USERS, DEFAULT_USERS);
       reservations = loadStorage(STORAGE_KEYS.RESERVATIONS, generateSampleReservations());
-      currentUser = loadStorage(STORAGE_KEYS.CURRENT_USER, null);
       equipmentOptions = loadStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, DEFAULT_EQUIPMENT_OPTIONS);
+
+      // 當前登入 Session 僅從本機 sessionStorage 讀取
+      try {
+        const savedUserStr = sessionStorage.getItem('hc_current_user');
+        currentUser = (authToken && savedUserStr) ? JSON.parse(savedUserStr) : null;
+      } catch (e) {
+        currentUser = null;
+      }
 
       appCloudData[STORAGE_KEYS.DEPARTMENTS] = departments;
       appCloudData[STORAGE_KEYS.ROOMS] = rooms;
       appCloudData[STORAGE_KEYS.USERS] = users;
       appCloudData[STORAGE_KEYS.RESERVATIONS] = reservations;
-      appCloudData[STORAGE_KEYS.CURRENT_USER] = currentUser;
       appCloudData[STORAGE_KEYS.EQUIPMENT_OPTIONS] = equipmentOptions;
     };
 
@@ -358,7 +364,12 @@
     let rooms = loadStorage(STORAGE_KEYS.ROOMS, DEFAULT_ROOMS);
     let users = loadStorage(STORAGE_KEYS.USERS, DEFAULT_USERS);
     let reservations = loadStorage(STORAGE_KEYS.RESERVATIONS, generateSampleReservations());
-    let currentUser = loadStorage(STORAGE_KEYS.CURRENT_USER, null);
+    let currentUser = (() => {
+      try {
+        const saved = sessionStorage.getItem('hc_current_user');
+        return (authToken && saved) ? JSON.parse(saved) : null;
+      } catch(e) { return null; }
+    })();
     let equipmentOptions = loadStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, DEFAULT_EQUIPMENT_OPTIONS);
 
     // 檢視與點選狀態
@@ -2123,10 +2134,12 @@ END:VCALENDAR`;
         }
 
         authToken = data.token || '';
-        try { sessionStorage.setItem('hc_auth_token', authToken); } catch(e){}
-
         currentUser = data.user;
-        saveStorage(STORAGE_KEYS.CURRENT_USER, currentUser);
+        try {
+          sessionStorage.setItem('hc_auth_token', authToken);
+          sessionStorage.setItem('hc_current_user', JSON.stringify(currentUser));
+        } catch(e){}
+
         showToast(`歡迎登入！ ${currentUser.dept} - ${currentUser.name} (${currentUser.id})`);
 
         if (currentUser.mustChangePassword) {
@@ -2142,9 +2155,11 @@ END:VCALENDAR`;
     window.handleLogout = () => {
       currentUser = null;
       authToken = '';
-      try { sessionStorage.removeItem('hc_auth_token'); } catch(e){}
+      try {
+        sessionStorage.removeItem('hc_auth_token');
+        sessionStorage.removeItem('hc_current_user');
+      } catch(e){}
       activeModal = null;
-      saveStorage(STORAGE_KEYS.CURRENT_USER, null);
       showToast('已成功安全登出系統！');
       render();
     };
@@ -2399,7 +2414,7 @@ END:VCALENDAR`;
       currentUser = { ...currentUser, name, dept, ext, mustChangePassword: false };
 
       saveStorage(STORAGE_KEYS.USERS, users);
-      saveStorage(STORAGE_KEYS.CURRENT_USER, currentUser);
+      try { sessionStorage.setItem('hc_current_user', JSON.stringify(currentUser)); } catch(e){}
 
       showToast('個人帳號資料已完成更新！');
       closeModal();
@@ -2424,7 +2439,7 @@ END:VCALENDAR`;
       currentUser = safeCurrent;
 
       saveStorage(STORAGE_KEYS.USERS, users);
-      saveStorage(STORAGE_KEYS.CURRENT_USER, currentUser);
+      try { sessionStorage.setItem('hc_current_user', JSON.stringify(currentUser)); } catch(e){}
 
       showToast('密碼已成功更新，請妥善保管新密碼！');
       closeModal();
