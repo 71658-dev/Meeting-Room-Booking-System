@@ -138,43 +138,71 @@
       EQUIPMENT_OPTIONS: 'hc_health_equip_v5'
     };
 
-    // 全局記憶體資料緩存                                                                                                                                                                      
-    let appCloudData = {};                                                                                                                                                                     
-                                                                                                                                                                                               
-    // 1. 初始化從 Cloudflare KV 載入全站資料                                                                                                                                                  
-    async function initCloudData() {                                                                                                                                                           
-      try {                                                                                                                                                                                    
-        const res = await fetch('/api/data');                                                                                                                                                  
-        if (res.ok) {                                                                                                                                                                          
-          appCloudData = await res.json();                                                                                                                                                     
-        }                                                                                                                                                                                      
-      } catch (e) {                                                                                                                                                                            
-        console.warn('雲端資料讀取失敗，使用備份/預設資料', e);                                                                                                                                
-      }                                                                                                                                                                                        
-    }                                                                                                                                                                                          
-                                                                                                                                                                                               
-    // 2. 讀取資料                                                                                                                                                                             
-    const loadStorage = (key, fallback) => {                                                                                                                                                   
-      return appCloudData[key] !== undefined ? appCloudData[key] : fallback;                                                                                                                   
-    };                                                                                                                                                                                         
-                                                                                                                                                                                               
-    // 3. 儲存資料（更新記憶體並同步推送到 Cloudflare KV）                                                                                                                                     
-    const saveStorage = async (key, data) => {                                                                                                                                                 
-      appCloudData[key] = data;                                                                                                                                                                
-                                                                                                                                                                                               
-      // 寫入本機 localStorage 作為快取                                                                                                                                                        
-      try { localStorage.setItem(key, JSON.stringify(data)); } catch(e){}                                                                                                                      
-                                                                                                                                                                                               
-      // 非同步同步回傳給 Cloudflare KV                                                                                                                                                        
-      try {                                                                                                                                                                                    
-        await fetch('/api/data', {                                                                                                                                                             
-          method: 'POST',                                                                                                                                                                      
-          headers: { 'Content-Type': 'application/json' },                                                                                                                                     
-          body: JSON.stringify(appCloudData)                                                                                                                                                   
-        });                                                                                                                                                                                    
-      } catch (e) {                                                                                                                                                                            
-        console.error('Cloudflare KV 寫入失敗:', e);                                                                                                                                           
-      }                                                                                                                                                                                        
+    // 全局記憶體資料緩存
+    let appCloudData = {};
+
+    // 1. 初始化從 Cloudflare KV 載入全站資料
+    async function initCloudData() {
+      try {
+        const res = await fetch('/api/data');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+            appCloudData = data;
+          }
+        }
+      } catch (e) {
+        console.warn('雲端資料讀取失敗，使用本機/預設資料', e);
+      }
+    }
+
+    // 2. 讀取資料
+    const loadStorage = (key, fallback) => {
+      if (appCloudData && appCloudData[key] !== undefined) {
+        return appCloudData[key];
+      }
+      try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : fallback;
+      } catch (e) {
+        console.error('Storage Read Error', e);
+        return fallback;
+      }
+    };
+
+    // 3. 儲存資料（更新記憶體並同步推送到 Cloudflare KV）
+    const saveStorage = async (key, data) => {
+      appCloudData[key] = data;
+
+      // 寫入本機 localStorage 作為快取
+      try { localStorage.setItem(key, JSON.stringify(data)); } catch(e){}
+
+      // 非同步同步到 Cloudflare KV
+      try {
+        await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(appCloudData)
+        });
+      } catch (e) {
+        console.error('Cloudflare KV 同步失敗:', e);
+      }
+    };
+
+    const reloadStateFromStorage = () => {
+      departments = loadStorage(STORAGE_KEYS.DEPARTMENTS, DEFAULT_DEPARTMENTS);
+      rooms = loadStorage(STORAGE_KEYS.ROOMS, DEFAULT_ROOMS);
+      users = loadStorage(STORAGE_KEYS.USERS, DEFAULT_USERS);
+      reservations = loadStorage(STORAGE_KEYS.RESERVATIONS, generateSampleReservations());
+      currentUser = loadStorage(STORAGE_KEYS.CURRENT_USER, null);
+      equipmentOptions = loadStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, DEFAULT_EQUIPMENT_OPTIONS);
+
+      appCloudData[STORAGE_KEYS.DEPARTMENTS] = departments;
+      appCloudData[STORAGE_KEYS.ROOMS] = rooms;
+      appCloudData[STORAGE_KEYS.USERS] = users;
+      appCloudData[STORAGE_KEYS.RESERVATIONS] = reservations;
+      appCloudData[STORAGE_KEYS.CURRENT_USER] = currentUser;
+      appCloudData[STORAGE_KEYS.EQUIPMENT_OPTIONS] = equipmentOptions;
     };
 
     const formatDateStr = (date) => {
@@ -2670,7 +2698,9 @@ END:VCALENDAR`;
     };
 
     // 啟動初始化掛載
-    window.onload = () => {
+    window.onload = async () => {
+      await initCloudData();
+      reloadStateFromStorage();
       render();
     };
   </script>
