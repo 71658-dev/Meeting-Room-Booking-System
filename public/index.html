@@ -113,10 +113,7 @@
     };
 
     const DEFAULT_USERS = [
-      { id: '99999', name: '系統管理者', role: 'admin', dept: '行政科', ext: '101', password: 'admin', mustChangePassword: false },
-      { id: '71658', name: '張小明', role: 'staff', dept: '企劃科', ext: '215', password: '03-5355191', mustChangePassword: true },
-      { id: '82014', name: '王大衛', role: 'staff', dept: '醫政科', ext: '302', password: '03-5355281', mustChangePassword: false },
-      { id: '60521', name: '陳美麗', role: 'staff', dept: '食品藥物管理科', ext: '410', password: '03-5353170', mustChangePassword: false }
+      { id: '99999', name: '系統管理者', role: 'admin', dept: '行政科', ext: '101', mustChangePassword: false }
     ];
 
     const TIME_PRESETS = [
@@ -1701,8 +1698,8 @@ END:VCALENDAR`;
                   <input type="text" id="profileExt" value="${escapeHtml(currentUser.ext)}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold" />
                 </div>
                 <div>
-                  <label class="block font-bold text-slate-700 mb-1">登入密碼</label>
-                  <input type="password" id="profilePassword" value="${escapeHtml(currentUser.password)}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold" />
+                  <label class="block font-bold text-slate-700 mb-1">修改密碼 <span class="text-xs font-normal text-slate-400">(如不修改請留空)</span></label>
+                  <input type="password" id="profilePassword" placeholder="輸入新密碼以進行修改" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold" />
                 </div>
                 <div class="pt-3 flex justify-end gap-2">
                   <button type="button" onclick="closeModal()" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-600 font-bold hover:bg-slate-100">取消</button>
@@ -2066,31 +2063,36 @@ END:VCALENDAR`;
     // ==========================================
     // 4. 事件處理器 (Event Handlers & CRUD Controller)
     // ==========================================
-    window.handleLogin = (e) => {
+    window.handleLogin = async (e) => {
       e.preventDefault();
       const id = document.getElementById('loginId').value.trim();
       const pw = document.getElementById('loginPassword').value.trim();
 
-      const user = users.find(u => u.id === id);
-      if (!user) {
-        showToast('找不到該工號，請確認輸入是否正確！', 'error');
-        return;
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, password: pw })
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          showToast(data.message || '登入失敗，請確認工號與密碼是否正確！', 'error');
+          return;
+        }
+
+        currentUser = data.user;
+        saveStorage(STORAGE_KEYS.CURRENT_USER, currentUser);
+        showToast(`歡迎登入！ ${currentUser.dept} - ${currentUser.name} (${currentUser.id})`);
+
+        if (currentUser.mustChangePassword) {
+          activeModal = 'MUST_CHANGE_PW';
+        }
+
+        render();
+      } catch (err) {
+        showToast('連線失敗，請檢查網路狀態！', 'error');
       }
-
-      if (user.password !== pw) {
-        showToast('密碼不正確！預設密碼為所屬科室之公務專線。', 'error');
-        return;
-      }
-
-      currentUser = user;
-      saveStorage(STORAGE_KEYS.CURRENT_USER, currentUser);
-      showToast(`歡迎登入！ ${user.dept} - ${user.name} (${user.id})`);
-
-      if (user.mustChangePassword) {
-        activeModal = 'MUST_CHANGE_PW';
-      }
-
-      render();
     };
 
 
@@ -2341,8 +2343,15 @@ END:VCALENDAR`;
       const ext = document.getElementById('profileExt').value.trim();
       const password = document.getElementById('profilePassword').value.trim();
 
-      users = users.map(u => u.id === currentUser.id ? { ...u, name, dept, ext, password, mustChangePassword: false } : u);
-      currentUser = { ...currentUser, name, dept, ext, password, mustChangePassword: false };
+      users = users.map(u => {
+        if (u.id === currentUser.id) {
+          const updated = { ...u, name, dept, ext, mustChangePassword: false };
+          if (password) updated.password = password;
+          return updated;
+        }
+        return u;
+      });
+      currentUser = { ...currentUser, name, dept, ext, mustChangePassword: false };
 
       saveStorage(STORAGE_KEYS.USERS, users);
       saveStorage(STORAGE_KEYS.CURRENT_USER, currentUser);
@@ -2366,7 +2375,8 @@ END:VCALENDAR`;
       }
 
       users = users.map(u => u.id === currentUser.id ? { ...u, password: newPw, mustChangePassword: false } : u);
-      currentUser = { ...currentUser, password: newPw, mustChangePassword: false };
+      const { password: _, ...safeCurrent } = { ...currentUser, mustChangePassword: false };
+      currentUser = safeCurrent;
 
       saveStorage(STORAGE_KEYS.USERS, users);
       saveStorage(STORAGE_KEYS.CURRENT_USER, currentUser);
