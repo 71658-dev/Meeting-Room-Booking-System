@@ -552,6 +552,22 @@ END:VCALENDAR`;
       });
     };
 
+    const renderTurnstileWidget = () => {
+      setTimeout(() => {
+        const container = document.getElementById('turnstile-container');
+        if (container && window.turnstile) {
+          try {
+            container.innerHTML = '';
+            window.turnstile.render('#turnstile-container', {
+              sitekey: '0x4AAAAAAEGpkZprlggOYtpb',
+              action: 'turnstile-spin-v2',
+              theme: 'light'
+            });
+          } catch (e) {}
+        }
+      }, 50);
+    };
+
     // ==========================================
     // 渲染驅動控制器 (Main Controller)
     // ==========================================
@@ -560,6 +576,7 @@ END:VCALENDAR`;
 
       if (!currentUser) {
         appEl.innerHTML = renderLoginView();
+        renderTurnstileWidget();
       } else {
         appEl.innerHTML = renderMainView();
       }
@@ -615,7 +632,7 @@ END:VCALENDAR`;
 
               <!-- Cloudflare Turnstile 防機器人驗證區塊 -->
               <div class="flex justify-center py-1">
-                <div class="cf-turnstile" data-sitekey="0x4AAAAAAEGpkZprlggOYtpb" data-theme="light"></div>
+                <div id="turnstile-container" class="cf-turnstile" data-sitekey="0x4AAAAAAEGpkZprlggOYtpb" data-action="turnstile-spin-v2" data-theme="light"></div>
               </div>
 
               <button type="submit"
@@ -2095,6 +2112,7 @@ END:VCALENDAR`;
         const data = await res.json();
 
         if (!res.ok || !data.success) {
+          setTimeout(() => window.turnstile?.reset(), 0);
           showToast(data.message || '登入失敗，請確認工號與密碼是否正確！', 'error');
           return;
         }

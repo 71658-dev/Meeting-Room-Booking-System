@@ -17,9 +17,10 @@ async function hashPassword(password) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// 驗證 Cloudflare Turnstile 防機器人 Token
+// 驗證 Cloudflare Turnstile 防機器人 Token (發送至 https://challenges.cloudflare.com/turnstile/v0/siteverify)
 async function verifyTurnstileToken(token, secretKey, clientIP) {
   if (!token) return false;
+
   try {
     const formData = new URLSearchParams();
     formData.append('secret', secretKey);
@@ -175,12 +176,12 @@ export default {
           });
         }
 
-        // 防機器人 Turnstile 驗證
-        const secretKey = env.TURNSTILE_SECRET_KEY || TURNSTILE_SECRET_KEY;
+        // 防機器人 Turnstile 驗證 (使用 env.TURNSTILE_SECRET)
+        const secretKey = env.TURNSTILE_SECRET || '0x4AAAAAAEGpkae1Cr3V76i3m7ooE9pys1I';
         const isHuman = await verifyTurnstileToken(turnstileToken, secretKey, clientIP);
 
         if (!isHuman) {
-          return new Response(JSON.stringify({ success: false, message: '防機器人安全驗證未通過或無效，請勾選驗證框後重試！' }), {
+          return new Response(JSON.stringify({ success: false, message: '防機器人安全驗證未通過或已過期，請重試！' }), {
             status: 403,
             headers: getCorsHeaders(request)
           });
