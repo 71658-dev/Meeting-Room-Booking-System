@@ -1,5 +1,5 @@
 {                                                                                                                                                                                          
-      "name": "meeting-room-system",                                                                                                                                                           
+      "name": "meeting-room-booking-system",                                                                                                                                                           
       "main": "src/index.js",                                                                                                                                                                  
       "compatibility_date": "2024-09-23",                                                                                                                                                      
       "assets": {                                                                                                                                                                              
