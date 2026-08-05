@@ -38,15 +38,36 @@ async function verifyTurnstileToken(token, secretKey, clientIP) {
   }
 }
 
+// UTF-8 安全 Base64Url 編碼 (支援中文與 Unicode 字元)
+function base64UrlEncode(str) {
+  const bytes = new TextEncoder().encode(typeof str === 'string' ? str : JSON.stringify(str));
+  let binString = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binString += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binString)
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+}
+
+// UTF-8 安全 Base64Url 解碼
+function base64UrlDecode(str) {
+  let s = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const binString = atob(s);
+  const bytes = Uint8Array.from(binString, (m) => m.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
 // 簽發 JWT Token (過期時間 8 小時)
 async function generateToken(payload) {
   const header = { alg: 'HS256', typ: 'JWT' };
   const now = Math.floor(Date.now() / 1000);
   const fullPayload = { ...payload, iat: now, exp: now + 8 * 3600 };
 
-  const base64Url = (str) => btoa(str).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  const encodedHeader = base64Url(JSON.stringify(header));
-  const encodedPayload = base64Url(JSON.stringify(fullPayload));
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(fullPayload));
 
   const dataToSign = `${encodedHeader}.${encodedPayload}`;
   const key = await crypto.subtle.importKey(
@@ -57,7 +78,13 @@ async function generateToken(payload) {
     ['sign']
   );
   const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(dataToSign));
-  const encodedSignature = base64Url(String.fromCharCode(...new Uint8Array(signature)));
+
+  const sigBytes = new Uint8Array(signature);
+  let sigBin = '';
+  for (let i = 0; i < sigBytes.byteLength; i++) {
+    sigBin += String.fromCharCode(sigBytes[i]);
+  }
+  const encodedSignature = btoa(sigBin).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 
   return `${dataToSign}.${encodedSignature}`;
 }
@@ -80,15 +107,12 @@ async function verifyToken(token) {
       ['verify']
     );
 
-    const base64UrlDecode = (str) => {
-      str = str.replace(/-/g, '+').replace(/_/g, '/');
-      while (str.length % 4) str += '=';
-      return atob(str);
-    };
+    let sigStr = encodedSignature.replace(/-/g, '+').replace(/_/g, '/');
+    while (sigStr.length % 4) sigStr += '=';
+    const sigBin = atob(sigStr);
+    const sigBytes = Uint8Array.from(sigBin, (c) => c.charCodeAt(0));
 
-    const sigBytes = new Uint8Array([...base64UrlDecode(encodedSignature)].map(c => c.charCodeAt(0)));
     const isValid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(dataToSign));
-
     if (!isValid) return null;
 
     const payload = JSON.parse(base64UrlDecode(encodedPayload));
