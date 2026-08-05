@@ -184,6 +184,11 @@
     const saveStorage = async (key, data) => {
       appCloudData[key] = data;
 
+      // CURRENT_USER 屬前端 Session 本機狀態，無須寫入雲端全域 KV 資料庫
+      if (key === STORAGE_KEYS.CURRENT_USER) {
+        return;
+      }
+
       try {
         const headers = { 'Content-Type': 'application/json' };
         if (authToken) {
@@ -2140,6 +2145,7 @@ END:VCALENDAR`;
       try { sessionStorage.removeItem('hc_auth_token'); } catch(e){}
       activeModal = null;
       saveStorage(STORAGE_KEYS.CURRENT_USER, null);
+      showToast('已成功安全登出系統！');
       render();
     };
 
