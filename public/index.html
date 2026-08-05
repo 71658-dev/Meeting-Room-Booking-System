@@ -7,6 +7,18 @@
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='25' fill='%230d9488'/%3E%3Cpath d='M22 35h56v45H22z' fill='none' stroke='white' stroke-width='6' stroke-linejoin='round'/%3E%3Cpath d='M22 35h56v14H22z' fill='white'/%3E%3Cpath d='M34 22v16M66 22v16' stroke='white' stroke-width='6' stroke-linecap='round'/%3E%3Crect x='34' y='57' width='10' height='9' rx='2' fill='white'/%3E%3Crect x='56' y='57' width='10' height='9' rx='2' fill='white'/%3E%3Crect x='34' y='70' width='10' height='9' rx='2' fill='white'/%3E%3Crect x='56' y='70' width='10' height='9' rx='2' fill='white'/%3E%3C/svg%3E">
 
+  <!-- Suppress Tailwind CDN Production Warning -->
+  <script>
+    (function() {
+      const origWarn = console.warn;
+      console.warn = function(...args) {
+        if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) {
+          return;
+        }
+        origWarn.apply(console, args);
+      };
+    })();
+  </script>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -600,36 +612,7 @@ END:VCALENDAR`;
                 <span>登入預約系統</span>
               </button>
 
-              <div class="mt-6 pt-5 border-t border-slate-100">
-                <p class="text-xs text-center text-slate-500 mb-3 font-semibold flex items-center justify-center gap-1">
-                  <span>⚡ 快速體驗測試帳號 (點擊直接登入)：</span>
-                </p>
-                <div class="grid grid-cols-2 gap-2 text-xs">
-                  <button type="button" onclick="quickDemoLogin('99999')"
-                    class="p-2.5 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-xl text-left transition group">
-                    <div class="font-bold flex items-center gap-1 text-purple-700"><i data-lucide="shield-check" class="w-3.5 h-3.5 text-purple-600"></i> 管理者 (99999)</div>
-                    <div class="text-[10px] text-purple-600 mt-0.5">全權限存取</div>
-                  </button>
 
-                  <button type="button" onclick="quickDemoLogin('71658')"
-                    class="p-2.5 bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200 rounded-xl text-left transition">
-                    <div class="font-bold text-teal-800">企劃科-張小明</div>
-                    <div class="text-[10px] text-teal-600 mt-0.5">工號 71658</div>
-                  </button>
-
-                  <button type="button" onclick="quickDemoLogin('82014')"
-                    class="p-2.5 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 rounded-xl text-left transition">
-                    <div class="font-bold text-blue-800">醫藥科-王大衛</div>
-                    <div class="text-[10px] text-blue-600 mt-0.5">工號 82014</div>
-                  </button>
-
-                  <button type="button" onclick="quickDemoLogin('60521')"
-                    class="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 rounded-xl text-left transition">
-                    <div class="font-bold text-emerald-800">食藥科-陳美麗</div>
-                    <div class="text-[10px] text-emerald-600 mt-0.5">工號 60521</div>
-                  </button>
-                </div>
-              </div>
             </form>
 
             <div class="bg-slate-50 px-6 py-3 border-t border-slate-100 text-[11px] text-slate-400 text-center">
@@ -2110,18 +2093,7 @@ END:VCALENDAR`;
       render();
     };
 
-    window.quickDemoLogin = (userId) => {
-      const u = users.find(x => x.id === userId);
-      if (u) {
-        currentUser = u;
-        saveStorage(STORAGE_KEYS.CURRENT_USER, currentUser);
-        showToast(`已切換身分為：${u.name} (${u.role === 'admin' ? '管理者' : '一般帳號'})`);
-        if (u.mustChangePassword) {
-          activeModal = 'MUST_CHANGE_PW';
-        }
-        render();
-      }
-    };
+
 
     window.handleLogout = () => {
       currentUser = null;
