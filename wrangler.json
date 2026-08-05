@@ -1,0 +1,14 @@
+{                                                                                                                                                                                          
+      "name": "meeting-room-system",                                                                                                                                                           
+      "main": "src/index.js",                                                                                                                                                                  
+      "compatibility_date": "2024-09-23",                                                                                                                                                      
+      "assets": {                                                                                                                                                                              
+        "directory": "./public"                                                                                                                                                                
+      },                                                                                                                                                                                       
+      "kv_namespaces": [                                                                                                                                                                       
+        {                                                                                                                                                                                      
+          "binding": "MEETING_DB",                                                                                                                                                             
+          "id": "填入您在步驟1取得的_KV_ID"                                                                                                                                                    
+        }                                                                                                                                                                                      
+      ]                                                                                                                                                                                        
+    }
