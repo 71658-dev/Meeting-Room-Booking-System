@@ -128,7 +128,7 @@
       { id: 'IMPORTANT', label: '重大專案簡報會', color: 'bg-rose-100 text-rose-800 border-rose-300' }
     ];
 
-    // LocalStorage 控制器
+    // Cloudflare KV 資料庫控制器
     const STORAGE_KEYS = {
       DEPARTMENTS: 'hc_health_depts_v5',
       ROOMS: 'hc_health_rooms_v5',
@@ -156,26 +156,17 @@
       }
     }
 
-    // 2. 讀取資料
+    // 2. 讀取資料 (全改由 Cloudflare KV 記憶體快取)
     const loadStorage = (key, fallback) => {
       if (appCloudData && appCloudData[key] !== undefined) {
         return appCloudData[key];
       }
-      try {
-        const item = localStorage.getItem(key);
-        return item ? JSON.parse(item) : fallback;
-      } catch (e) {
-        console.error('Storage Read Error', e);
-        return fallback;
-      }
+      return fallback;
     };
 
-    // 3. 儲存資料（更新記憶體並同步推送到 Cloudflare KV）
+    // 3. 儲存資料 (全改由 Cloudflare KV 雲端儲存)
     const saveStorage = async (key, data) => {
       appCloudData[key] = data;
-
-      // 寫入本機 localStorage 作為快取
-      try { localStorage.setItem(key, JSON.stringify(data)); } catch(e){}
 
       // 非同步同步到 Cloudflare KV
       try {
