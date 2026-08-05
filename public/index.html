@@ -165,6 +165,11 @@
       }
     }
 
+    // 全局 JWT 驗證 Token 緩存
+    let authToken = (() => {
+      try { return sessionStorage.getItem('hc_auth_token') || ''; } catch(e) { return ''; }
+    })();
+
     // 2. 讀取資料 (全改由 Cloudflare KV 記憶體快取)
     const loadStorage = (key, fallback) => {
       if (appCloudData && appCloudData[key] !== undefined) {
@@ -173,15 +178,18 @@
       return fallback;
     };
 
-    // 3. 儲存資料 (全改由 Cloudflare KV 雲端儲存)
+    // 3. 儲存資料 (全改由 Cloudflare KV 雲端儲存，需帶 JWT Bearer Token)
     const saveStorage = async (key, data) => {
       appCloudData[key] = data;
 
-      // 非同步同步到 Cloudflare KV
       try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`;
+        }
         await fetch('/api/data', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: headers,
           body: JSON.stringify(appCloudData)
         });
       } catch (e) {
@@ -2081,6 +2089,9 @@ END:VCALENDAR`;
           return;
         }
 
+        authToken = data.token || '';
+        try { sessionStorage.setItem('hc_auth_token', authToken); } catch(e){}
+
         currentUser = data.user;
         saveStorage(STORAGE_KEYS.CURRENT_USER, currentUser);
         showToast(`歡迎登入！ ${currentUser.dept} - ${currentUser.name} (${currentUser.id})`);
@@ -2095,10 +2106,10 @@ END:VCALENDAR`;
       }
     };
 
-
-
     window.handleLogout = () => {
       currentUser = null;
+      authToken = '';
+      try { sessionStorage.removeItem('hc_auth_token'); } catch(e){}
       activeModal = null;
       saveStorage(STORAGE_KEYS.CURRENT_USER, null);
       render();

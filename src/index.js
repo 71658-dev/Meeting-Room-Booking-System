@@ -1,3 +1,5 @@
+const JWT_SECRET = 'hc_health_jwt_secret_key_2026_v1!';
+
 // 預設使用者清單（當 KV 尚無資料時初始化使用）
 const DEFAULT_USERS = [
   { id: '99999', name: '系統管理者', role: 'admin', dept: '行政科', ext: '101', password: 'admin', mustChangePassword: false }
@@ -6,12 +8,86 @@ const DEFAULT_USERS = [
 // SHA-256 密碼雜湊與加鹽
 async function hashPassword(password) {
   if (!password) return '';
-  // 如果已經是 64 位 16 進位 SHA-256 Hash，直接返回
   if (/^[a-f0-9]{64}$/i.test(password)) return password;
   const msgBuffer = new TextEncoder().encode(password + '_hc_health_salt_v1');
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// 簽發 JWT Token (過期時間 8 小時)
+async function generateToken(payload) {
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const now = Math.floor(Date.now() / 1000);
+  const fullPayload = { ...payload, iat: now, exp: now + 8 * 3600 };
+
+  const base64Url = (str) => btoa(str).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  const encodedHeader = base64Url(JSON.stringify(header));
+  const encodedPayload = base64Url(JSON.stringify(fullPayload));
+
+  const dataToSign = `${encodedHeader}.${encodedPayload}`;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(JWT_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(dataToSign));
+  const encodedSignature = base64Url(String.fromCharCode(...new Uint8Array(signature)));
+
+  return `${dataToSign}.${encodedSignature}`;
+}
+
+// 驗證 JWT Token
+async function verifyToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  try {
+    const [encodedHeader, encodedPayload, encodedSignature] = parts;
+    const dataToSign = `${encodedHeader}.${encodedPayload}`;
+
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(JWT_SECRET),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+
+    const base64UrlDecode = (str) => {
+      str = str.replace(/-/g, '+').replace(/_/g, '/');
+      while (str.length % 4) str += '=';
+      return atob(str);
+    };
+
+    const sigBytes = new Uint8Array([...base64UrlDecode(encodedSignature)].map(c => c.charCodeAt(0)));
+    const isValid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(dataToSign));
+
+    if (!isValid) return null;
+
+    const payload = JSON.parse(base64UrlDecode(encodedPayload));
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < now) return null;
+
+    return payload;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 動態 CORS Headers Helper
+function getCorsHeaders(request) {
+  const origin = request ? (request.headers.get('Origin') || '*') : '*';
+  return {
+    'content-type': 'application/json;charset=UTF-8',
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true'
+  };
 }
 
 // 移除使用者物件中的敏感密碼欄位
@@ -35,22 +111,36 @@ export default {
     // 處理 CORS OPTIONS 預檢
     if (request.method === 'OPTIONS') {
       return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        },
+        headers: getCorsHeaders(request)
       });
     }
 
-    // 1. 後端獨立登入驗證 API (POST /api/login)
+    // 1. 後端獨立登入驗證 API (POST /api/login) - 具備防暴力破解 (Rate Limiting) 與 JWT 簽發
     if (url.pathname === '/api/login' && request.method === 'POST') {
       try {
         const { id, password } = await request.json();
         if (!id || !password) {
           return new Response(JSON.stringify({ success: false, message: '請輸入工號與密碼！' }), {
             status: 400,
-            headers: { 'content-type': 'application/json;charset=UTF-8', 'Access-Control-Allow-Origin': '*' }
+            headers: getCorsHeaders(request)
+          });
+        }
+
+        // 防暴力破解 Rate Limiting 檢查
+        const clientIP = request.headers.get('cf-connecting-ip') || 'global';
+        const lockKey = `login_lock_${clientIP}_${id}`;
+        const failRecordStr = await env.MEETING_DB.get(lockKey);
+        const failRecord = failRecordStr ? JSON.parse(failRecordStr) : { count: 0, lockUntil: 0 };
+
+        const nowMs = Date.now();
+        if (failRecord.lockUntil && nowMs < failRecord.lockUntil) {
+          const remainSec = Math.ceil((failRecord.lockUntil - nowMs) / 1000);
+          return new Response(JSON.stringify({
+            success: false,
+            message: `登入嘗試失敗次數過多！帳號已鎖定，請等待 ${remainSec} 秒後再試。`
+          }), {
+            status: 429,
+            headers: getCorsHeaders(request)
           });
         }
 
@@ -58,7 +148,6 @@ export default {
         let appData = dataStr ? JSON.parse(dataStr) : {};
         let users = appData['hc_health_users_v5'];
 
-        // 如果資料庫中還沒有用戶清單，寫入初始化數據並 Hash 密碼
         if (!users || !Array.isArray(users) || users.length === 0) {
           users = JSON.parse(JSON.stringify(DEFAULT_USERS));
           for (const u of users) {
@@ -69,32 +158,39 @@ export default {
         }
 
         const user = users.find(u => u.id === id);
-        if (!user) {
-          return new Response(JSON.stringify({ success: false, message: '找不到該工號，請確認輸入是否正確！' }), {
-            status: 400,
-            headers: { 'content-type': 'application/json;charset=UTF-8', 'Access-Control-Allow-Origin': '*' }
-          });
-        }
-
         const inputHash = await hashPassword(password);
-        const userStoredHash = await hashPassword(user.password);
 
-        if (inputHash !== userStoredHash) {
-          return new Response(JSON.stringify({ success: false, message: '密碼不正確！' }), {
-            status: 400,
-            headers: { 'content-type': 'application/json;charset=UTF-8', 'Access-Control-Allow-Origin': '*' }
+        if (!user || inputHash !== await hashPassword(user.password)) {
+          // 增加登入失敗次數
+          failRecord.count = (failRecord.count || 0) + 1;
+          if (failRecord.count >= 5) {
+            failRecord.lockUntil = nowMs + 15 * 60 * 1000; // 鎖定 15 分鐘
+            failRecord.count = 0;
+          }
+          await env.MEETING_DB.put(lockKey, JSON.stringify(failRecord), { expirationTtl: 900 });
+
+          return new Response(JSON.stringify({
+            success: false,
+            message: failRecord.lockUntil > nowMs ? '登入失敗達 5 次，帳號已暫時鎖定 15 分鐘！' : `工號或密碼不正確！（已失敗 ${failRecord.count}/5 次）`
+          }), {
+            status: 401,
+            headers: getCorsHeaders(request)
           });
         }
 
-        // 登入成功：刪除傳回前端的密碼欄位
+        // 登入成功：清除鎖定紀錄
+        await env.MEETING_DB.delete(lockKey);
+
         const { password: _, ...safeUser } = user;
-        return new Response(JSON.stringify({ success: true, user: safeUser }), {
-          headers: { 'content-type': 'application/json;charset=UTF-8', 'Access-Control-Allow-Origin': '*' }
+        const token = await generateToken({ id: safeUser.id, role: safeUser.role, dept: safeUser.dept });
+
+        return new Response(JSON.stringify({ success: true, token, user: safeUser }), {
+          headers: getCorsHeaders(request)
         });
       } catch (err) {
         return new Response(JSON.stringify({ success: false, message: err.message }), {
           status: 500,
-          headers: { 'content-type': 'application/json;charset=UTF-8', 'Access-Control-Allow-Origin': '*' }
+          headers: getCorsHeaders(request)
         });
       }
     }
@@ -107,22 +203,30 @@ export default {
         const safeData = sanitizeAppData(rawData);
 
         return new Response(JSON.stringify(safeData), {
-          headers: {
-            'content-type': 'application/json;charset=UTF-8',
-            'Access-Control-Allow-Origin': '*'
-          }
+          headers: getCorsHeaders(request)
         });
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), {
           status: 500,
-          headers: { 'content-type': 'application/json;charset=UTF-8' }
+          headers: getCorsHeaders(request)
         });
       }
     }
 
-    // 3. 儲存所有資料 API (POST /api/data) - 後端 Hash 並保護密碼
+    // 3. 儲存所有資料 API (POST /api/data) - 必須帶 Authorization JWT Token
     if (url.pathname === '/api/data' && request.method === 'POST') {
       try {
+        const authHeader = request.headers.get('Authorization') || '';
+        const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+        const userPayload = await verifyToken(token);
+
+        if (!userPayload) {
+          return new Response(JSON.stringify({ success: false, message: '未授權的操作或登入逾時，請重新登入！' }), {
+            status: 401,
+            headers: getCorsHeaders(request)
+          });
+        }
+
         const bodyText = await request.text();
         const incomingData = JSON.parse(bodyText);
 
@@ -148,15 +252,12 @@ export default {
 
         await env.MEETING_DB.put('all_app_data', JSON.stringify(incomingData));
         return new Response(JSON.stringify({ success: true }), {
-          headers: {
-            'content-type': 'application/json;charset=UTF-8',
-            'Access-Control-Allow-Origin': '*'
-          }
+          headers: getCorsHeaders(request)
         });
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), {
           status: 500,
-          headers: { 'content-type': 'application/json;charset=UTF-8', 'Access-Control-Allow-Origin': '*' }
+          headers: getCorsHeaders(request)
         });
       }
     }
