@@ -23,6 +23,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Cloudflare Turnstile Anti-Bot SDK -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <!-- Google Fonts Inter -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
@@ -609,6 +611,11 @@ END:VCALENDAR`;
                   <input type="password" id="loginPassword" placeholder="請輸入密碼"
                     class="w-full pl-10 pr-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition" required />
                 </div>
+              </div>
+
+              <!-- Cloudflare Turnstile 防機器人驗證區塊 -->
+              <div class="flex justify-center py-1">
+                <div class="cf-turnstile" data-sitekey="0x4AAAAAAEGpkZprlggOYtpb" data-theme="light"></div>
               </div>
 
               <button type="submit"
@@ -2076,11 +2083,14 @@ END:VCALENDAR`;
       const id = document.getElementById('loginId').value.trim();
       const pw = document.getElementById('loginPassword').value.trim();
 
+      const formData = new FormData(e.target);
+      const turnstileToken = formData.get('cf-turnstile-response') || document.querySelector('[name="cf-turnstile-response"]')?.value || '';
+
       try {
         const res = await fetch('/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, password: pw })
+          body: JSON.stringify({ id, password: pw, turnstileToken })
         });
         const data = await res.json();
 

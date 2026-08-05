@@ -1,4 +1,6 @@
 const JWT_SECRET = 'hc_health_jwt_secret_key_2026_v1!';
+// Cloudflare Turnstile 免費測試 Secret Key (可於 Cloudflare Dashboard 替換為正式金鑰或經由 env.TURNSTILE_SECRET_KEY 傳入)
+const TURNSTILE_SECRET_KEY = '1x0000000000000000000000000000000AA';
 
 // 預設使用者清單（當 KV 尚無資料時初始化使用）
 const DEFAULT_USERS = [
@@ -13,6 +15,27 @@ async function hashPassword(password) {
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// 驗證 Cloudflare Turnstile 防機器人 Token
+async function verifyTurnstileToken(token, secretKey, clientIP) {
+  if (!token) return false;
+  try {
+    const formData = new URLSearchParams();
+    formData.append('secret', secretKey);
+    formData.append('response', token);
+    if (clientIP && clientIP !== 'global') formData.append('remoteip', clientIP);
+
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: formData
+    });
+    const outcome = await res.json();
+    return outcome.success === true;
+  } catch (e) {
+    console.error('Turnstile Verification Error:', e);
+    return false;
+  }
 }
 
 // 簽發 JWT Token (過期時間 8 小時)
@@ -115,10 +138,12 @@ export default {
       });
     }
 
-    // 1. 後端獨立登入驗證 API (POST /api/login) - 具備防暴力破解 (Rate Limiting) 與 JWT 簽發
+    // 1. 後端獨立登入驗證 API (POST /api/login) - 整合 Cloudflare Turnstile 驗證、Rate Limiting 與 JWT
     if (url.pathname === '/api/login' && request.method === 'POST') {
       try {
-        const { id, password } = await request.json();
+        const { id, password, turnstileToken } = await request.json();
+        const clientIP = request.headers.get('cf-connecting-ip') || 'global';
+
         if (!id || !password) {
           return new Response(JSON.stringify({ success: false, message: '請輸入工號與密碼！' }), {
             status: 400,
@@ -126,8 +151,18 @@ export default {
           });
         }
 
+        // 防機器人 Turnstile 驗證
+        const secretKey = env.TURNSTILE_SECRET_KEY || TURNSTILE_SECRET_KEY;
+        const isHuman = await verifyTurnstileToken(turnstileToken, secretKey, clientIP);
+
+        if (!isHuman) {
+          return new Response(JSON.stringify({ success: false, message: '防機器人安全驗證未通過或無效，請勾選驗證框後重試！' }), {
+            status: 403,
+            headers: getCorsHeaders(request)
+          });
+        }
+
         // 防暴力破解 Rate Limiting 檢查
-        const clientIP = request.headers.get('cf-connecting-ip') || 'global';
         const lockKey = `login_lock_${clientIP}_${id}`;
         const failRecordStr = await env.MEETING_DB.get(lockKey);
         const failRecord = failRecordStr ? JSON.parse(failRecordStr) : { count: 0, lockUntil: 0 };
@@ -164,7 +199,7 @@ export default {
           // 增加登入失敗次數
           failRecord.count = (failRecord.count || 0) + 1;
           if (failRecord.count >= 5) {
-            failRecord.lockUntil = nowMs + 15 * 60 * 1000; // 鎖定 15 分鐘
+            failRecord.lockUntil = nowMs + 15 * 60 * 1000;
             failRecord.count = 0;
           }
           await env.MEETING_DB.put(lockKey, JSON.stringify(failRecord), { expirationTtl: 900 });
