@@ -491,10 +491,10 @@ END:VCALENDAR`;
                 <div id="turnstile-container" class="cf-turnstile" data-sitekey="0x4AAAAAAEHj2et8u57PV5z1" data-action="turnstile-spin-v2" data-theme="light"></div>
               </div>
 
-              <button type="submit"
-                class="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg hover:shadow-teal-600/30 transition duration-200 flex items-center justify-center gap-2 text-sm mt-2">
+              <button type="submit" id="loginSubmitBtn"
+                class="w-full py-3.5 bg-teal-600 hover:bg-teal-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg hover:shadow-teal-600/30 transition duration-200 flex items-center justify-center gap-2 text-sm mt-2">
                 <i data-lucide="log-in" class="w-4 h-4"></i>
-                <span>登入預約系統</span>
+                <span id="loginBtnText">登入預約系統</span>
               </button>
 
 
@@ -1998,6 +1998,31 @@ END:VCALENDAR`;
       const formData = new FormData(e.target);
       const turnstileToken = formData.get('cf-turnstile-response') || document.querySelector('[name="cf-turnstile-response"]')?.value || '';
 
+      const submitBtn = document.getElementById('loginSubmitBtn');
+      const originalHtml = submitBtn ? submitBtn.innerHTML : '';
+
+      // [UI/UX 優化 1] 按下登入瞬間觸發按鈕載入動畫 (Loading State)，並防範重複點擊
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-80', 'cursor-wait');
+        submitBtn.innerHTML = `
+          <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>安全驗證與登入中...</span>
+        `;
+      }
+
+      const resetBtnState = () => {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.classList.remove('opacity-80', 'cursor-wait');
+          submitBtn.innerHTML = originalHtml;
+          lucide.createIcons();
+        }
+      };
+
       try {
         const res = await fetch('/api/login', {
           method: 'POST',
@@ -2007,6 +2032,7 @@ END:VCALENDAR`;
         const data = await res.json();
 
         if (!res.ok || !data.success) {
+          resetBtnState();
           setTimeout(() => window.turnstile?.reset(), 0);
           showToast(data.message || '登入失敗，請確認工號與密碼是否正確！', 'error');
           return;
@@ -2019,14 +2045,31 @@ END:VCALENDAR`;
           sessionStorage.setItem('hc_current_user', JSON.stringify(currentUser));
         } catch(e){}
 
+        // [UI/UX 優化 2] 登入成功顯示流暢綠色驗證成功狀態與微視覺轉場
+        if (submitBtn) {
+          submitBtn.classList.remove('bg-teal-600', 'hover:bg-teal-700');
+          submitBtn.classList.add('bg-emerald-600');
+          submitBtn.innerHTML = `
+            <svg class="w-4 h-4 text-white inline-block animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+            </svg>
+            <span>驗證成功！進入系統...</span>
+          `;
+        }
+
         showToast(`歡迎登入！ ${currentUser.dept} - ${currentUser.name} (${currentUser.id})`);
 
         if (currentUser.mustChangePassword) {
           activeModal = 'MUST_CHANGE_PW';
         }
 
-        render();
+        // 250ms 平滑過渡轉場至儀表板主畫面
+        setTimeout(() => {
+          render();
+        }, 250);
+
       } catch (err) {
+        resetBtnState();
         showToast('連線失敗，請檢查網路狀態！', 'error');
       }
     };
