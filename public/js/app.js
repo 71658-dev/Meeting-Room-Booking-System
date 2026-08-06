@@ -681,21 +681,23 @@ END:VCALENDAR`;
       const todayStr = formatDateStr(new Date());
 
       return `
-        <!-- Calendar Container -->
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
+        <!-- Calendar Container (方正幾何設計、深色清晰邊框) -->
+        <div class="bg-white border-2 border-slate-400 shadow-sm flex-1 flex flex-col rounded-none overflow-hidden">
           <div class="overflow-x-auto custom-scrollbar flex-1 flex flex-col">
             <div class="min-w-[700px] flex-1 flex flex-col">
-              <div class="grid grid-cols-7 bg-slate-100 border-b border-slate-200 text-center text-xs font-black text-slate-600 py-2.5">
+              <!-- Weekday Header Bar -->
+              <div class="grid grid-cols-7 bg-slate-200 border-b-2 border-slate-400 text-center text-xs font-black text-slate-800 py-2.5">
                 <div class="text-rose-600">週日</div>
                 <div>週一</div>
                 <div>週二</div>
                 <div>週三</div>
                 <div>週四</div>
                 <div>週五</div>
-                <div class="text-teal-700">週六</div>
+                <div class="text-teal-800">週六</div>
               </div>
 
-              <div class="grid grid-cols-7 grid-rows-5 flex-1 divide-x divide-y divide-slate-100 min-h-[580px]">
+              <!-- Month Grid (1px gap-px 確保邊框完整不重疊被覆蓋) -->
+              <div class="grid grid-cols-7 grid-rows-5 flex-1 bg-slate-300 gap-px min-h-[580px]">
                 ${days.map(cell => {
                   const dayReservations = filteredReservations.filter(r => r.date === cell.dateStr);
                   const isToday = cell.dateStr === todayStr;
@@ -707,12 +709,14 @@ END:VCALENDAR`;
                       tabindex="0"
                       role="button"
                       aria-label="${cell.dateStr} 預約概況"
-                      class="group relative p-2 flex flex-col calendar-day-hover min-h-[110px] rounded-xl cursor-pointer select-none transition-all duration-200 border outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${
+                      class="group relative p-2 flex flex-col calendar-day-hover min-h-[110px] rounded-none cursor-pointer select-none transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${
                         cell.isCurrentMonth
                           ? (isSelected
-                              ? 'bg-teal-50/90 border-2 border-teal-500 shadow-md ring-2 ring-teal-400/30'
-                              : (isToday ? 'bg-amber-50/50 border-amber-400' : 'bg-white hover:bg-teal-50/70 hover:border-teal-400 hover:shadow-md'))
-                          : 'bg-slate-100/40 text-slate-500 hover:bg-slate-100 hover:border-slate-300 font-medium'
+                              ? 'bg-teal-50/90 border-2 border-teal-600 z-10 shadow-md ring-2 ring-teal-500/40'
+                              : (isToday
+                                  ? 'bg-amber-50/90 border-2 border-amber-500 z-10 shadow-md ring-2 ring-amber-400/50'
+                                  : 'bg-white border border-slate-300 hover:border-teal-500 hover:z-10 hover:shadow-md hover:bg-teal-50/40'))
+                          : 'bg-slate-100/80 text-slate-500 border border-slate-300 hover:bg-slate-100 hover:border-slate-400 font-medium'
                       }">
 
                   <!-- Top Bar inside Date Box -->
