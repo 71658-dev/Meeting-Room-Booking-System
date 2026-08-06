@@ -681,12 +681,12 @@ END:VCALENDAR`;
       const todayStr = formatDateStr(new Date());
 
       return `
-        <!-- Calendar Container (方正幾何設計、深色清晰邊框) -->
-        <div class="bg-white border-2 border-slate-400 shadow-sm flex-1 flex flex-col rounded-none overflow-hidden">
+        <!-- Calendar Container -->
+        <div class="bg-white shadow-sm flex-1 flex flex-col rounded-none overflow-hidden">
           <div class="overflow-x-auto custom-scrollbar flex-1 flex flex-col">
             <div class="min-w-[700px] flex-1 flex flex-col">
               <!-- Weekday Header Bar -->
-              <div class="grid grid-cols-7 bg-slate-200 border-b-2 border-slate-400 text-center text-xs font-black text-slate-800 py-2.5">
+              <div class="grid grid-cols-7 bg-slate-100 border-b border-slate-300 text-center text-xs font-black text-slate-700 py-2.5">
                 <div class="text-rose-600">週日</div>
                 <div>週一</div>
                 <div>週二</div>
