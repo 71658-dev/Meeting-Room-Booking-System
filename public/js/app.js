@@ -682,7 +682,7 @@ END:VCALENDAR`;
 
       return `
         <!-- Calendar Container -->
-        <div class="bg-white shadow-sm flex-1 flex flex-col rounded-none overflow-hidden">
+        <div class="bg-white border border-slate-300 shadow-sm flex-1 flex flex-col rounded-none overflow-hidden">
           <div class="overflow-x-auto custom-scrollbar flex-1 flex flex-col">
             <div class="min-w-[700px] flex-1 flex flex-col">
               <!-- Weekday Header Bar -->
