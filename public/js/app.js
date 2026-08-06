@@ -735,12 +735,14 @@ END:VCALENDAR`;
                       ${isSelected ? '<span class="text-[9px] font-black text-teal-700 bg-teal-100 px-1.5 py-0.2 rounded-full">已點選</span>' : ''}
                     </div>
 
-                    <!-- Quick Add Button on Hover -->
+                    <!-- Quick Add Button on Hover (僅限今日與未來日期顯示) -->
+                    ${cell.dateStr >= todayStr ? `
                     <button onclick="event.stopPropagation(); openNewReservationModal('${cell.dateStr}')"
                       class="text-[10px] font-bold text-teal-700 hover:text-teal-900 opacity-0 group-hover:opacity-100 transition-all duration-200 px-2 py-0.5 rounded-lg bg-teal-100/90 hover:bg-teal-200 border border-teal-300 flex items-center gap-0.5 shadow-2xs"
                       title="在此日期新增預約">
                       <i data-lucide="plus" class="w-3 h-3"></i> 預約
                     </button>
+                    ` : ''}
                   </div>
 
                   <!-- Reservations list snippet inside Date Box -->
@@ -833,11 +835,18 @@ END:VCALENDAR`;
 
             <!-- Change Target Date Button -->
             <div class="flex items-center gap-2">
-              <input type="date" value="${activeDateStr}" onchange="changeSelectedDate(this.value)" class="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold font-mono focus:ring-2 focus:ring-teal-500" />
+              <input type="date" value="${activeDateStr}" min="${todayStr}" onchange="changeSelectedDate(this.value)" class="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold font-mono focus:ring-2 focus:ring-teal-500" />
+              ${activeDateStr >= todayStr ? `
               <button onclick="openNewReservationModal('${activeDateStr}')" class="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-sm">
                 <i data-lucide="plus" class="w-3.5 h-3.5"></i>
                 <span>新增本日預約</span>
               </button>
+              ` : `
+              <button disabled class="px-3.5 py-1.5 bg-slate-200 text-slate-400 rounded-xl text-xs font-bold cursor-not-allowed border border-slate-300 flex items-center gap-1 shadow-2xs" title="過去日期無法新增預約">
+                <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+                <span>過去日期不可預約</span>
+              </button>
+              `}
             </div>
           </div>
 
@@ -1145,10 +1154,16 @@ END:VCALENDAR`;
                     </button>
                   </div>
 
+                  ${selectedDateStr >= todayStr ? `
                   <button onclick="openNewReservationModal('${selectedDateStr}')" class="px-3.5 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-extrabold transition shadow-md flex items-center gap-1.5">
                     <i data-lucide="plus" class="w-4 h-4"></i>
                     <span>新增預約</span>
                   </button>
+                  ` : `
+                  <span class="px-3.5 py-1.5 bg-slate-700 text-slate-400 border border-slate-600 rounded-xl text-xs font-bold cursor-not-allowed flex items-center gap-1">
+                    <i data-lucide="lock" class="w-3.5 h-3.5"></i> 過去日期不可預約
+                  </span>
+                  `}
                   <button onclick="closeModal()" aria-label="關閉視窗" class="p-2 text-slate-400 hover:text-white transition">
                     <i data-lucide="x" class="w-6 h-6"></i>
                   </button>
@@ -1380,7 +1395,7 @@ END:VCALENDAR`;
 
                   <div>
                     <label class="block font-bold text-slate-700 mb-1">預約日期</label>
-                    <input type="date" id="resDate" value="${editingReservationData.date}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold font-mono" />
+                    <input type="date" id="resDate" min="${formatDateStr(new Date())}" value="${editingReservationData.date}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold font-mono" />
                   </div>
                 </div>
 
@@ -2189,7 +2204,14 @@ END:VCALENDAR`;
         roomId = null;
       }
 
-      const defaultDate = dateStr || selectedDateStr || formatDateStr(new Date());
+      const todayStr = formatDateStr(new Date());
+      const defaultDate = dateStr || selectedDateStr || todayStr;
+
+      // 防護機制：禁止預約今日以前的過去日期
+      if (defaultDate < todayStr) {
+        showToast('無法新增預約！預約日期不可早於今天。', 'error');
+        return;
+      }
       const selectedRoom = roomId ? rooms.find(r => r.id === roomId) : null;
       const roomObj = selectedRoom || (rooms.length > 0 ? rooms[0] : { id: '', name: '' });
 
@@ -2229,6 +2251,13 @@ END:VCALENDAR`;
       const roomId = document.getElementById('resRoomId').value;
       const roomObj = rooms.find(r => r.id === roomId);
       const date = document.getElementById('resDate').value;
+      const todayStr = formatDateStr(new Date());
+
+      // 防護機制：禁止新增或修改為今日以前的過去日期
+      if (date < todayStr) {
+        showToast('無法新增或修改預約！預約日期不可早於今天。', 'error');
+        return;
+      }
       const startTime = document.getElementById('resStartTime').value;
       const endTime = document.getElementById('resEndTime').value;
       const reason = document.getElementById('resReason').value.trim();
