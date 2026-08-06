@@ -143,7 +143,7 @@
       departments = loadStorage(STORAGE_KEYS.DEPARTMENTS, DEFAULT_DEPARTMENTS);
       rooms = loadStorage(STORAGE_KEYS.ROOMS, DEFAULT_ROOMS);
       users = loadStorage(STORAGE_KEYS.USERS, DEFAULT_USERS);
-      reservations = loadStorage(STORAGE_KEYS.RESERVATIONS, generateSampleReservations());
+      reservations = loadStorage(STORAGE_KEYS.RESERVATIONS, []);
       equipmentOptions = loadStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, DEFAULT_EQUIPMENT_OPTIONS);
 
       // 當前登入 Session 僅從本機 sessionStorage 讀取
@@ -181,7 +181,7 @@
     let departments = loadStorage(STORAGE_KEYS.DEPARTMENTS, DEFAULT_DEPARTMENTS);
     let rooms = loadStorage(STORAGE_KEYS.ROOMS, DEFAULT_ROOMS);
     let users = loadStorage(STORAGE_KEYS.USERS, DEFAULT_USERS);
-    let reservations = loadStorage(STORAGE_KEYS.RESERVATIONS, generateSampleReservations());
+    let reservations = loadStorage(STORAGE_KEYS.RESERVATIONS, []);
     let currentUser = (() => {
       try {
         const saved = sessionStorage.getItem('hc_current_user');
