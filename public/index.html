@@ -417,6 +417,9 @@
     // 衝突提示與建議狀態
     let conflictSuggestion = null;
 
+    // 輪詢定時器 ID (全域 Script 作用域)
+    let _pollingTimerId = null;
+
     // ==========================================
     // 工具函式 (Utilities)
     // ==========================================
@@ -2891,7 +2894,6 @@ END:VCALENDAR`;
       render();
 
       // [記憶體與 UI 優化] 智慧靜默輪詢 (每 30 秒)，防止強行重繪打斷使用者輸入，資料無變更時跳過 render
-    let _pollingTimerId = null;
     let _lastDataJsonStr = '';
 
     _pollingTimerId = setInterval(async () => {

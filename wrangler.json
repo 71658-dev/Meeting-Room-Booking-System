@@ -1,20 +1,31 @@
-{                                                                                                                                                                                          
-      "name": "meeting-room-booking-system",                                                                                                                                                           
-      "main": "src/index.js",                                                                                                                                                                  
-      "compatibility_date": "2024-09-23",                                                                                                                                                      
-      "assets": {                                                                                                                                                                              
-        "directory": "./public"                                                                                                                                                                
-      },
-      "observability": {
-        "logs": {
-          "enabled": true,
-          "invocation_logs": true
-        }
-      },                                                                                                                                                                                       
-      "kv_namespaces": [                                                                                                                                                                       
-        {                                                                                                                                                                                      
-          "binding": "MEETING_DB",                                                                                                                                                             
-          "id": "208ec04968e549ea8f98ea561f53239f"                                                                                                                                                    
-        }                                                                                                                                                                                      
-      ]                                                                                                                                                                               
+{
+  "name": "meeting-room-booking-system",
+  "main": "src/index.js",
+  "compatibility_date": "2024-09-23",
+  "assets": {
+    "directory": "./public"
+  },
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
     }
+  },
+  "kv_namespaces": [
+    {
+      "binding": "MEETING_DB",
+      "id": "208ec04968e549ea8f98ea561f53239f"
+    }
+  ],
+  "env": {
+    "development": {
+      "name": "meeting-room-booking-system-dev",
+      "kv_namespaces": [
+        {
+          "binding": "MEETING_DB",
+          "id": "208ec04968e549ea8f98ea561f53239f"
+        }
+      ]
+    }
+  }
+}
