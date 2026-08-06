@@ -1,12 +1,13 @@
 {
   "name": "meeting-room-booking-system",
   "version": "1.0.0",
-  "description": "新竹市衛生局會議室預約管理系統",
+  "description": "新竹市衛生局會議室預約管理系統 (Development Branch)",
   "main": "src/index.js",
   "scripts": {
     "dev": "npx wrangler dev",
-    "deploy:prod": "npx wrangler deploy --env \"\"",
-    "deploy:dev": "npx wrangler deploy --env development"
+    "deploy": "npx wrangler deploy --env development",
+    "deploy:dev": "npx wrangler deploy --env development",
+    "deploy:prod": "npx wrangler deploy --env \"\""
   },
   "devDependencies": {
     "wrangler": "^4.119.0"
