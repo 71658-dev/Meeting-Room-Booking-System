@@ -175,124 +175,7 @@
       return `${datePart} ${hrs}:${mins}`;
     };
 
-    const generateSampleReservations = () => {
-      const today = new Date();
-      const curYear = today.getFullYear();
-      const curMonth = today.getMonth();
-
-      const getDate = (day) => formatDateStr(new Date(curYear, curMonth, day));
-
-      return [
-        {
-          id: 'res-1',
-          roomId: 'R1',
-          roomName: '11樓會議室',
-          date: getDate(5),
-          startTime: '10:00',
-          endTime: '12:00',
-          reason: '新竹市社區健康促進科室協調會',
-          meetingType: 'CROSS_DEPT',
-          equipment: ['單槍投影機', '無線麥克風 (2支)'],
-          headcount: 25,
-          userId: '71658',
-          userName: '張小明',
-          dept: '企劃科',
-          ext: '215',
-          notes: '請協助預先設定視訊連線與投影系統。',
-          createdAt: `${getDate(1)} 09:30`
-        },
-        {
-          id: 'res-2',
-          roomId: 'R3',
-          roomName: '12樓會議室',
-          date: getDate(12),
-          startTime: '13:30',
-          endTime: '17:30',
-          reason: '年度食品安全稽查業務講習演練',
-          meetingType: 'INTERNAL',
-          equipment: ['單槍投影機', '無線麥克風 (2支)', '移動式白板'],
-          headcount: 60,
-          userId: '60521',
-          userName: '陳美麗',
-          dept: '食品藥物管理科',
-          ext: '410',
-          notes: '需要備有桌上型名牌與簡報筆。',
-          createdAt: `${getDate(3)} 14:10`
-        },
-        {
-          id: 'res-3',
-          roomId: 'R1',
-          roomName: '11樓會議室',
-          date: getDate(18),
-          startTime: '08:30',
-          endTime: '10:00',
-          reason: '醫事機構線上管理系統說明會',
-          meetingType: 'EXTERNAL',
-          equipment: ['單槍投影機', '茶水服務區'],
-          headcount: 40,
-          userId: '82014',
-          userName: '王大衛',
-          dept: '醫事藥政科',
-          ext: '302',
-          notes: '',
-          createdAt: `${getDate(10)} 11:20`
-        },
-        {
-          id: 'res-4',
-          roomId: 'R2',
-          roomName: '12樓會議室',
-          date: getDate(today.getDate()),
-          startTime: '13:30',
-          endTime: '15:30',
-          reason: '局內例行性資訊安全考核會議',
-          meetingType: 'IMPORTANT',
-          equipment: ['單槍投影機'],
-          headcount: 15,
-          userId: '71658',
-          userName: '張小明',
-          dept: '企劃科',
-          ext: '215',
-          notes: '重要稽核會議，請維持環境整潔。',
-          createdAt: `${getDate(today.getDate() - 1)} 16:45`
-        },
-        {
-          id: 'res-5',
-          roomId: 'R4',
-          roomName: '11樓會議室',
-          date: getDate(today.getDate()),
-          startTime: '10:00',
-          endTime: '11:30',
-          reason: '傳染病防治專家顧問諮詢會議',
-          meetingType: 'EXTERNAL',
-          equipment: ['視訊會議設備', '茶水服務區'],
-          headcount: 10,
-          userId: '99999',
-          userName: '系統管理者',
-          dept: '行政科',
-          ext: '101',
-          notes: '有外聘委員參加，請準備茶水與視訊連線。',
-          createdAt: `${getDate(today.getDate() - 2)} 09:15`
-        },
-        {
-          id: 'res-6',
-          roomId: 'R5',
-          roomName: '12樓會議室',
-          date: getDate(25),
-          startTime: '14:00',
-          endTime: '16:00',
-          reason: '衛福部跨縣市公共衛生聯繫會報',
-          meetingType: 'EXTERNAL',
-          equipment: ['高階視訊會議系統'],
-          headcount: 20,
-          userId: '99999',
-          userName: '系統管理者',
-          dept: '行政科',
-          ext: '101',
-          notes: '',
-          createdAt: `${getDate(15)} 08:50`
-        }
-      ];
-    };
+    const generateSampleReservations = () => [];
 
     // 載入全域 State
     let departments = loadStorage(STORAGE_KEYS.DEPARTMENTS, DEFAULT_DEPARTMENTS);
@@ -486,11 +369,11 @@ END:VCALENDAR`;
 
     // 重置系統資料
     window.resetSystemDataToDefault = () => {
-      showConfirmModal('系統資料重置確認', '確定要將所有會議室、帳號、科室與預約紀錄重置為預設範例資料嗎？此操作不可復原。', () => {
+      showConfirmModal('清空範例資料確認', '確定要將所有預約紀錄與一般帳號清空，僅保留超級管理者帳號嗎？此操作不可復原。', () => {
         departments = [...DEFAULT_DEPARTMENTS];
         rooms = [...DEFAULT_ROOMS];
         users = [...DEFAULT_USERS];
-        reservations = generateSampleReservations();
+        reservations = [];
 
         saveStorage(STORAGE_KEYS.DEPARTMENTS, departments);
         saveStorage(STORAGE_KEYS.ROOMS, rooms);
@@ -499,7 +382,7 @@ END:VCALENDAR`;
         saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
         saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
 
-        showToast('系統資料已恢復至預設範例狀態！');
+        showToast('系統已重置，已清空範例資料並保留超級管理者！');
         render();
       });
     };
