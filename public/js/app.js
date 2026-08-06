@@ -715,8 +715,8 @@ END:VCALENDAR`;
                               ? 'bg-teal-50/90 border-2 border-teal-600 z-10 shadow-md ring-2 ring-teal-500/40'
                               : (isToday
                                   ? 'bg-amber-50/90 border-2 border-amber-500 z-10 shadow-md ring-2 ring-amber-400/50'
-                                  : 'bg-white border border-slate-300 hover:border-teal-500 hover:z-10 hover:shadow-md hover:bg-teal-50/40'))
-                          : 'bg-slate-100/80 text-slate-500 border border-slate-300 hover:bg-slate-100 hover:border-slate-400 font-medium'
+                                  : 'bg-white hover:bg-teal-50/60 hover:z-10 hover:shadow-md'))
+                          : 'bg-slate-100/80 text-slate-500 hover:bg-slate-100 font-medium'
                       }">
 
                   <!-- Top Bar inside Date Box -->
