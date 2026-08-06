@@ -137,7 +137,8 @@ function getCorsHeaders(request) {
     'Access-Control-Allow-Origin': matchedOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true'
+    'Access-Control-Allow-Credentials': 'true',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload'
   };
 }
 
@@ -160,10 +161,37 @@ export default {
     const url = new URL(request.url);
     const jwtSecret = env.JWT_SECRET || 'hc_health_jwt_secret_key_2026_v1!';
 
+    // [Always Use HTTPS] 強制 HTTP 轉 HTTPS 301 重定向
+    const proto = request.headers.get('x-forwarded-proto');
+    if (proto && proto === 'http') {
+      const httpsUrl = request.url.replace(/^http:/, 'https:');
+      return Response.redirect(httpsUrl, 301);
+    }
+
     // 處理 CORS OPTIONS 預檢
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: getCorsHeaders(request)
+      });
+    }
+
+    // RFC 9116 安全聯絡資訊 Standard security.txt Route
+    if (url.pathname === '/.well-known/security.txt' || url.pathname === '/security.txt') {
+      const securityTxtContent = [
+        '# RFC 9116 Standard Security Contact Information',
+        'Contact: mailto:security@hc_health.gov.tw',
+        'Contact: https://meeting-room-booking-system.71658.workers.dev',
+        'Expires: 2027-12-31T23:59:59.000Z',
+        'Preferred-Languages: zh-TW, en',
+        'Canonical: https://meeting-room-booking-system.71658.workers.dev/.well-known/security.txt'
+      ].join('\n');
+
+      return new Response(securityTxtContent, {
+        headers: {
+          'content-type': 'text/plain; charset=utf-8',
+          'cache-control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*'
+        }
       });
     }
 

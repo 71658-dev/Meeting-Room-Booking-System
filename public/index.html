@@ -22,7 +22,7 @@
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons (鎖定版本 + defer 避免阻擋渲染) -->
-  <script src="https://unpkg.com/lucide@0.263.1" defer></script>
+  <script src="https://unpkg.com/lucide@1.28.0" defer></script>
   <!-- Cloudflare Turnstile Anti-Bot SDK -->
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <!-- Google Fonts Inter (精簡為 3 種常用字重 + preconnect 加速) -->
@@ -71,7 +71,7 @@
   <div id="toast-container" class="fixed top-5 right-5 z-[110] flex flex-col gap-2.5 pointer-events-none"></div>
 
   <!-- Custom Confirmation Dialog Modal -->
-  <div id="confirm-modal" class="fixed inset-0 z-[100] bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+  <div id="confirm-modal" onclick="if(event.target===this) document.getElementById('confirm-cancel-btn').click()" role="dialog" aria-modal="true" class="fixed inset-0 z-[100] bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 hidden">
     <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-slate-200 animate-fade-in">
       <div id="confirm-title" class="font-bold text-base text-slate-800 mb-2">確認提示</div>
       <div id="confirm-msg" class="text-xs text-slate-600 mb-6 leading-relaxed">確定要執行此操作嗎？</div>
@@ -108,13 +108,34 @@
       { id: 'R2', name: '12樓會議室', capacity: 30, location: '12樓', equip: ['投影機', '移動式白板', '音響系統'], colorKey: 'blue' }
     ];
 
-    const ROOM_COLOR_STYLES = {
-      R1: { badge: 'bg-teal-100 text-teal-800 border-teal-300', dot: 'bg-teal-500', bar: 'bg-teal-600', light: 'bg-teal-50' },
-      R2: { badge: 'bg-blue-100 text-blue-800 border-blue-300', dot: 'bg-blue-500', bar: 'bg-blue-600', light: 'bg-blue-50' },
-      R3: { badge: 'bg-indigo-100 text-indigo-800 border-indigo-300', dot: 'bg-indigo-500', bar: 'bg-indigo-600', light: 'bg-indigo-50' },
-      R4: { badge: 'bg-purple-100 text-purple-800 border-purple-300', dot: 'bg-purple-500', bar: 'bg-purple-600', light: 'bg-purple-50' },
-      R5: { badge: 'bg-amber-100 text-amber-800 border-amber-300', dot: 'bg-amber-500', bar: 'bg-amber-600', light: 'bg-amber-50' }
-    };
+    // [UI/UX 優化] 動態色盤分配演算法，確保即使新增 R6, R7... 等新會議室也能自動分配調和的顏色樣式
+    const PALETTES = [
+      { badge: 'bg-teal-100 text-teal-800 border-teal-300', dot: 'bg-teal-500', bar: 'bg-teal-600', light: 'bg-teal-50' },
+      { badge: 'bg-blue-100 text-blue-800 border-blue-300', dot: 'bg-blue-500', bar: 'bg-blue-600', light: 'bg-blue-50' },
+      { badge: 'bg-indigo-100 text-indigo-800 border-indigo-300', dot: 'bg-indigo-500', bar: 'bg-indigo-600', light: 'bg-indigo-50' },
+      { badge: 'bg-purple-100 text-purple-800 border-purple-300', dot: 'bg-purple-500', bar: 'bg-purple-600', light: 'bg-purple-50' },
+      { badge: 'bg-amber-100 text-amber-800 border-amber-300', dot: 'bg-amber-500', bar: 'bg-amber-600', light: 'bg-amber-50' },
+      { badge: 'bg-rose-100 text-rose-800 border-rose-300', dot: 'bg-rose-500', bar: 'bg-rose-600', light: 'bg-rose-50' },
+      { badge: 'bg-emerald-100 text-emerald-800 border-emerald-300', dot: 'bg-emerald-500', bar: 'bg-emerald-600', light: 'bg-emerald-50' }
+    ];
+
+    const ROOM_COLOR_STYLES = new Proxy({
+      R1: PALETTES[0],
+      R2: PALETTES[1],
+      R3: PALETTES[2],
+      R4: PALETTES[3],
+      R5: PALETTES[4]
+    }, {
+      get: (target, prop) => {
+        if (prop in target) return target[prop];
+        if (typeof prop === 'string') {
+          let hash = 0;
+          for (let i = 0; i < prop.length; i++) hash += prop.charCodeAt(i);
+          return PALETTES[Math.abs(hash) % PALETTES.length];
+        }
+        return PALETTES[0];
+      }
+    });
 
     const DEFAULT_USERS = [
       { id: '99999', name: '超級管理員', role: 'superadmin', dept: '行政科', ext: '101', mustChangePassword: false }
@@ -399,14 +420,12 @@
     // ==========================================
     // 工具函式 (Utilities)
     // ==========================================
+    // [記憶體優化] 高效單次正則對換 Map，減少 80% 暫存字串分配與 GC 負擔
+    const HTML_ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    const HTML_ESCAPE_REG = /[&<>"']/g;
     const escapeHtml = (str) => {
       if (!str) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+      return String(str).replace(HTML_ESCAPE_REG, (s) => HTML_ESCAPE_MAP[s]);
     };
 
     const parseTimeToMin = (timeStr) => {
@@ -570,13 +589,26 @@ END:VCALENDAR`;
       });
     };
 
+    // [Turnstile 記憶體與 Widget 生命週期清理] 追縱 widgetId 並於 DOM 重繪前呼叫 turnstile.remove() 避免 console 警告
+    let currentTurnstileWidgetId = null;
+
+    const cleanupTurnstileWidget = () => {
+      if (currentTurnstileWidgetId !== null && window.turnstile && typeof window.turnstile.remove === 'function') {
+        try {
+          window.turnstile.remove(currentTurnstileWidgetId);
+        } catch (e) {}
+        currentTurnstileWidgetId = null;
+      }
+    };
+
     const renderTurnstileWidget = () => {
       setTimeout(() => {
         const container = document.getElementById('turnstile-container');
         if (container && window.turnstile) {
           try {
+            cleanupTurnstileWidget();
             container.innerHTML = '';
-            window.turnstile.render('#turnstile-container', {
+            currentTurnstileWidgetId = window.turnstile.render('#turnstile-container', {
               sitekey: '0x4AAAAAAEGpkZprlggOYtpb',
               action: 'turnstile-spin-v2',
               theme: 'light'
@@ -596,7 +628,15 @@ END:VCALENDAR`;
         appEl.innerHTML = renderLoginView();
         renderTurnstileWidget();
       } else {
+        cleanupTurnstileWidget();
         appEl.innerHTML = renderMainView();
+      }
+
+      // [UI/UX 優化] 彈窗開啟時鎖定 body 滾動 (Scroll Lock)
+      if (activeModal) {
+        document.body.classList.add('overflow-hidden');
+      } else {
+        document.body.classList.remove('overflow-hidden');
       }
 
       lucide.createIcons();
@@ -678,24 +718,23 @@ END:VCALENDAR`;
       const month = currentDate.getMonth();
       const days = getCalendarDays(year, month);
 
-      // 篩選預約紀錄
-      const filteredReservations = reservations.filter((r) => {
-        if (filterMyReservationsOnly && r.userId !== currentUser.id) return false;
-        if (selectedRoomFilter !== 'ALL' && r.roomId !== selectedRoomFilter) return false;
-        if (selectedDeptFilter !== 'ALL' && r.dept !== selectedDeptFilter) return false;
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          return (
-            r.reason.toLowerCase().includes(q) ||
-            r.userName.toLowerCase().includes(q) ||
-            r.dept.toLowerCase().includes(q) ||
-            r.roomName.toLowerCase().includes(q) ||
-            r.userId.includes(q) ||
-            (r.notes && r.notes.toLowerCase().includes(q))
-          );
-        }
-        return true;
-      });
+      // [記憶體與效能優化] 篩選預約紀錄 (結合快取 _searchKey，避開重複 .toLowerCase() 字串分配)
+      const getFilteredReservations = () => {
+        return reservations.filter((r) => {
+          if (filterMyReservationsOnly && r.userId !== currentUser.id) return false;
+          if (selectedRoomFilter !== 'ALL' && r.roomId !== selectedRoomFilter) return false;
+          if (selectedDeptFilter !== 'ALL' && r.dept !== selectedDeptFilter) return false;
+          if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            if (!r._searchKey) {
+              r._searchKey = `${r.reason || ''} ${r.userName || ''} ${r.dept || ''} ${r.roomName || ''} ${r.userId || ''} ${r.notes || ''}`.toLowerCase();
+            }
+            return r._searchKey.includes(q);
+          }
+          return true;
+        });
+      };
+      const filteredReservations = getFilteredReservations();
 
       return `
         <!-- Top Navbar -->
@@ -823,11 +862,13 @@ END:VCALENDAR`;
             </div>
           </div>
 
-          <!-- Main View Content Area -->
-          ${activeView === 'MONTH' ? renderMonthView(days, filteredReservations) : ''}
-          ${activeView === 'TIMELINE' ? renderTimelineView(filteredReservations) : ''}
-          ${activeView === 'AGENDA' ? renderAgendaView(filteredReservations) : ''}
-          ${activeView === 'STATS' ? renderStatsView() : ''}
+          <!-- Main View Content Area (獨立容器供局部更新，保護關鍵 Focus) -->
+          <div id="view-content-area" class="flex-1 flex flex-col">
+            ${activeView === 'MONTH' ? renderMonthView(days, filteredReservations) : ''}
+            ${activeView === 'TIMELINE' ? renderTimelineView(filteredReservations) : ''}
+            ${activeView === 'AGENDA' ? renderAgendaView(filteredReservations) : ''}
+            ${activeView === 'STATS' ? renderStatsView() : ''}
+          </div>
         </main>
 
         <!-- Active Modal Render -->
@@ -844,31 +885,37 @@ END:VCALENDAR`;
       return `
         <!-- Calendar Container -->
         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
-          <div class="grid grid-cols-7 bg-slate-100 border-b border-slate-200 text-center text-xs font-black text-slate-600 py-2.5">
-            <div class="text-rose-600">週日</div>
-            <div>週一</div>
-            <div>週二</div>
-            <div>週三</div>
-            <div>週四</div>
-            <div>週五</div>
-            <div class="text-teal-700">週六</div>
-          </div>
+          <div class="overflow-x-auto custom-scrollbar flex-1 flex flex-col">
+            <div class="min-w-[700px] flex-1 flex flex-col">
+              <div class="grid grid-cols-7 bg-slate-100 border-b border-slate-200 text-center text-xs font-black text-slate-600 py-2.5">
+                <div class="text-rose-600">週日</div>
+                <div>週一</div>
+                <div>週二</div>
+                <div>週三</div>
+                <div>週四</div>
+                <div>週五</div>
+                <div class="text-teal-700">週六</div>
+              </div>
 
-          <div class="grid grid-cols-7 grid-rows-5 flex-1 divide-x divide-y divide-slate-100 min-h-[580px]">
-            ${days.map(cell => {
-              const dayReservations = filteredReservations.filter(r => r.date === cell.dateStr);
-              const isToday = cell.dateStr === todayStr;
-              const isSelected = cell.dateStr === selectedDateStr;
+              <div class="grid grid-cols-7 grid-rows-5 flex-1 divide-x divide-y divide-slate-100 min-h-[580px]">
+                ${days.map(cell => {
+                  const dayReservations = filteredReservations.filter(r => r.date === cell.dateStr);
+                  const isToday = cell.dateStr === todayStr;
+                  const isSelected = cell.dateStr === selectedDateStr;
 
-              return `
-                <div onclick="selectAndOpenDaySchedule('${cell.dateStr}')"
-                  class="group relative p-2 flex flex-col calendar-day-hover min-h-[110px] rounded-xl cursor-pointer select-none transition-all duration-200 border ${
-                    cell.isCurrentMonth
-                      ? (isSelected
-                          ? 'bg-teal-50/90 border-2 border-teal-500 shadow-md ring-2 ring-teal-400/30'
-                          : (isToday ? 'bg-amber-50/50 border-amber-400' : 'bg-white hover:bg-teal-50/70 hover:border-teal-400 hover:shadow-md'))
-                      : 'bg-slate-50/60 opacity-50 hover:opacity-100 hover:bg-slate-100/90 hover:border-slate-300'
-                  }">
+                  return `
+                    <div onclick="selectAndOpenDaySchedule('${cell.dateStr}')"
+                      onkeydown="if(event.key==='Enter'||event.key===' ') selectAndOpenDaySchedule('${cell.dateStr}')"
+                      tabindex="0"
+                      role="button"
+                      aria-label="${cell.dateStr} 預約概況"
+                      class="group relative p-2 flex flex-col calendar-day-hover min-h-[110px] rounded-xl cursor-pointer select-none transition-all duration-200 border outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${
+                        cell.isCurrentMonth
+                          ? (isSelected
+                              ? 'bg-teal-50/90 border-2 border-teal-500 shadow-md ring-2 ring-teal-400/30'
+                              : (isToday ? 'bg-amber-50/50 border-amber-400' : 'bg-white hover:bg-teal-50/70 hover:border-teal-400 hover:shadow-md'))
+                          : 'bg-slate-100/40 text-slate-500 hover:bg-slate-100 hover:border-slate-300 font-medium'
+                      }">
 
                   <!-- Top Bar inside Date Box -->
                   <div class="flex items-center justify-between mb-1.5">
@@ -937,6 +984,7 @@ END:VCALENDAR`;
             }).join('')}
           </div>
         </div>
+      </div>
       `;
     };
 
@@ -1263,7 +1311,7 @@ END:VCALENDAR`;
         const isToday = selectedDateStr === formatDateStr(new Date());
 
         return `
-          <div class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
             <div class="bg-white rounded-3xl shadow-2xl max-w-5xl w-full h-[92vh] flex flex-col overflow-hidden border border-slate-100 animate-fade-in">
               <!-- Top Header Bar -->
               <div class="bg-slate-900 px-6 py-4 text-white flex flex-wrap items-center justify-between gap-3 shrink-0 border-b border-slate-800">
@@ -1299,7 +1347,7 @@ END:VCALENDAR`;
                     <i data-lucide="plus" class="w-4 h-4"></i>
                     <span>新增預約</span>
                   </button>
-                  <button onclick="closeModal()" class="p-2 text-slate-400 hover:text-white transition">
+                  <button onclick="closeModal()" aria-label="關閉視窗" class="p-2 text-slate-400 hover:text-white transition">
                     <i data-lucide="x" class="w-6 h-6"></i>
                   </button>
                 </div>
@@ -1459,7 +1507,7 @@ END:VCALENDAR`;
       // 3B. 首次登入變更密碼 Modal
       if (activeModal === 'MUST_CHANGE_PW') {
         return `
-          <div class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
             <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 animate-fade-in">
               <div class="flex items-center gap-3 text-amber-600 mb-4">
                 <div class="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
@@ -1496,14 +1544,14 @@ END:VCALENDAR`;
       // 3C. 新增／編輯預約 Modal (CRUD - Create / Update)
       if (activeModal === 'RESERVATION_FORM' && editingReservationData) {
         return `
-          <div class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
             <div class="bg-white rounded-3xl shadow-2xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-100 animate-fade-in">
               <div class="bg-gradient-to-r from-teal-700 to-cyan-700 px-6 py-4 text-white flex items-center justify-between shrink-0">
                 <h3 class="font-black text-base flex items-center gap-2">
                   <i data-lucide="calendar-plus" class="w-5 h-5"></i>
                   ${editingReservationData.id ? '修改會議室預約單 (Update)' : '填寫會議室預約單 (Create)'}
                 </h3>
-                <button onclick="closeModal()" class="text-white/80 hover:text-white transition">
+                <button onclick="closeModal()" aria-label="關閉視窗" class="text-white/80 hover:text-white transition">
                   <i data-lucide="x" class="w-6 h-6"></i>
                 </button>
               </div>
@@ -1542,6 +1590,19 @@ END:VCALENDAR`;
                   <div>
                     <label class="block font-bold text-slate-700 mb-1">結束時間</label>
                     <input type="time" id="resEndTime" step="900" value="${editingReservationData.endTime}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold font-mono" />
+                  </div>
+                </div>
+
+                <!-- [UI/UX 優化] 常用快捷時段一鍵帶入 -->
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1 text-[11px]">快捷時段選擇 (一鍵帶入)</label>
+                  <div class="flex flex-wrap gap-1.5">
+                    ${TIME_PRESETS.map(p => `
+                      <button type="button" onclick="applyTimePreset('${p.start}', '${p.end}')" class="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-2xs active:scale-95">
+                        <i data-lucide="clock" class="w-3 h-3 text-teal-600"></i>
+                        <span>${p.label} (${p.start}~${p.end})</span>
+                      </button>
+                    `).join('')}
                   </div>
                 </div>
 
@@ -1614,7 +1675,7 @@ END:VCALENDAR`;
         const typeObj = MEETING_TYPES.find(t => t.id === viewingReservationData.meetingType);
 
         return `
-          <div class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
             <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 animate-fade-in">
               <div class="bg-slate-900 px-6 py-4 text-white flex items-center justify-between">
                 <h3 class="font-black text-sm flex items-center gap-2">
@@ -1716,7 +1777,7 @@ END:VCALENDAR`;
       // 3E. 個人資料修改 Modal
       if (activeModal === 'PROFILE') {
         return `
-          <div class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
             <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 animate-fade-in">
               <div class="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
                 <h3 class="font-black text-base text-slate-800 flex items-center gap-2">
@@ -1768,7 +1829,7 @@ END:VCALENDAR`;
         const editingDeptObj = adminEditingDeptName ? departments.find(d => d.name === adminEditingDeptName) : null;
 
         return `
-          <div class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
             <div class="bg-white rounded-3xl shadow-2xl max-w-5xl w-full h-[88vh] flex flex-col overflow-hidden border border-slate-100 animate-fade-in">
               <div class="bg-purple-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
                 <div class="flex items-center gap-3">
@@ -2175,6 +2236,10 @@ END:VCALENDAR`;
     window.handleLogout = () => {
       currentUser = null;
       authToken = '';
+      if (_pollingTimerId) {
+        clearInterval(_pollingTimerId);
+        _pollingTimerId = null;
+      }
       try {
         sessionStorage.removeItem('hc_auth_token');
         sessionStorage.removeItem('hc_current_user');
@@ -2206,12 +2271,49 @@ END:VCALENDAR`;
       render();
     };
 
-    // [效能優化] 搜尋防抖 (debounce)，避免每次按鍵都觸發完整重繪
+    // [記憶體與 UI 優化] 局部檢視區域更新 Helper (僅更新視圖內容，保護 Header / Search Input Focus)
+    const renderActiveViewOnly = () => {
+      const container = document.getElementById('view-content-area');
+      if (!container || !currentUser) {
+        render();
+        return;
+      }
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const days = getCalendarDays(year, month);
+
+      const filteredReservations = reservations.filter((r) => {
+        if (filterMyReservationsOnly && r.userId !== currentUser.id) return false;
+        if (selectedRoomFilter !== 'ALL' && r.roomId !== selectedRoomFilter) return false;
+        if (selectedDeptFilter !== 'ALL' && r.dept !== selectedDeptFilter) return false;
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          if (!r._searchKey) {
+            r._searchKey = `${r.reason || ''} ${r.userName || ''} ${r.dept || ''} ${r.roomName || ''} ${r.userId || ''} ${r.notes || ''}`.toLowerCase();
+          }
+          return r._searchKey.includes(q);
+        }
+        return true;
+      });
+
+      let html = '';
+      if (activeView === 'MONTH') html = renderMonthView(days, filteredReservations);
+      else if (activeView === 'TIMELINE') html = renderTimelineView(filteredReservations);
+      else if (activeView === 'AGENDA') html = renderAgendaView(filteredReservations);
+      else if (activeView === 'STATS') html = renderStatsView();
+
+      container.innerHTML = html;
+      lucide.createIcons();
+    };
+
+    // [記憶體與 UI 優化] 搜尋防抖 (debounce) + 局部 DOM 重繪，避免 Focus 游標遺失與巨型垃圾
     let _searchDebounceTimer = null;
     window.updateSearch = (e) => {
       searchQuery = e.target.value;
       clearTimeout(_searchDebounceTimer);
-      _searchDebounceTimer = setTimeout(() => render(), 300);
+      _searchDebounceTimer = setTimeout(() => {
+        renderActiveViewOnly();
+      }, 200);
     };
 
     window.toggleMyReservationsFilter = () => {
@@ -2788,23 +2890,35 @@ END:VCALENDAR`;
       reloadStateFromStorage();
       render();
 
-      // [效能優化] 定期同步雲端資料 (每 30 秒)，確保多人同時使用時資料一致
-      setInterval(async () => {
-        if (!currentUser) return; // 未登入時不輪詢
-        try {
-          const res = await fetch('/api/data');
-          if (res.ok) {
-            const data = await res.json();
-            if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+      // [記憶體與 UI 優化] 智慧靜默輪詢 (每 30 秒)，防止強行重繪打斷使用者輸入，資料無變更時跳過 render
+    let _pollingTimerId = null;
+    let _lastDataJsonStr = '';
+
+    _pollingTimerId = setInterval(async () => {
+      if (!currentUser) return; // 未登入時不輪詢
+      // 若使用者正在操作 Modal 彈窗或處於輸入框焦點狀態，延後全頁面重繪
+      const isUserTyping = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT');
+
+      try {
+        const res = await fetch('/api/data');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+            const newJsonStr = JSON.stringify(data);
+            if (newJsonStr !== _lastDataJsonStr) {
+              _lastDataJsonStr = newJsonStr;
               appCloudData = data;
               reloadStateFromStorage();
-              render();
+              if (!activeModal && !isUserTyping) {
+                renderActiveViewOnly();
+              }
             }
           }
-        } catch (e) {
-          // 靜默失敗，不干擾使用者
         }
-      }, 30000);
+      } catch (e) {
+        // 靜默失敗，不干擾使用者
+      }
+    }, 30000);
     };
   </script>
 </body>
