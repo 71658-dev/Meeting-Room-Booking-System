@@ -24,7 +24,8 @@ async function verifyTurnstileToken(token, secretKey, clientIP) {
 
     const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
-      body: formData
+      body: formData,
+      signal: AbortSignal.timeout(5000) // 5 秒超時，避免 Turnstile API 回應緩慢時阻塞整個請求
     });
     const outcome = await res.json();
     return outcome.success === true;
@@ -140,18 +141,18 @@ function getCorsHeaders(request) {
   };
 }
 
-// 移除使用者物件中的敏感密碼欄位
+// 移除使用者物件中的敏感密碼欄位（淺拷貝優化，避免三次 JSON 序列化）
 function sanitizeAppData(data) {
   if (!data || typeof data !== 'object') return {};
-  const cloned = JSON.parse(JSON.stringify(data));
+  const result = { ...data };
   const userKey = 'hc_health_users_v5';
-  if (Array.isArray(cloned[userKey])) {
-    cloned[userKey] = cloned[userKey].map(u => {
+  if (Array.isArray(result[userKey])) {
+    result[userKey] = result[userKey].map(u => {
       const { password, ...safeUser } = u;
       return safeUser;
     });
   }
-  return cloned;
+  return result;
 }
 
 export default {
@@ -179,6 +180,23 @@ export default {
           });
         }
 
+        // [效能優化] 先檢查 Rate Limiting，再驗證 Turnstile（避免已鎖定時浪費外部 API 呼叫）
+        const lockKey = `login_lock_${clientIP}_${id}`;
+        const failRecordStr = await env.MEETING_DB.get(lockKey);
+        const failRecord = failRecordStr ? JSON.parse(failRecordStr) : { count: 0, lockUntil: 0 };
+
+        const nowMs = Date.now();
+        if (failRecord.lockUntil && nowMs < failRecord.lockUntil) {
+          const remainSec = Math.ceil((failRecord.lockUntil - nowMs) / 1000);
+          return new Response(JSON.stringify({
+            success: false,
+            message: `登入嘗試失敗次數過多！帳號已鎖定，請等待 ${remainSec} 秒後再試。`
+          }), {
+            status: 429,
+            headers: getCorsHeaders(request)
+          });
+        }
+
         // 防機器人 Turnstile 驗證 (由 Worker 加密環境變數 env.TURNSTILE_SECRET 讀取)
         const secretKey = env.TURNSTILE_SECRET;
         if (!secretKey) {
@@ -193,23 +211,6 @@ export default {
         if (!isHuman) {
           return new Response(JSON.stringify({ success: false, message: '防機器人安全驗證未通過或已過期，請重試！' }), {
             status: 403,
-            headers: getCorsHeaders(request)
-          });
-        }
-
-        // 防暴力破解 Rate Limiting 檢查
-        const lockKey = `login_lock_${clientIP}_${id}`;
-        const failRecordStr = await env.MEETING_DB.get(lockKey);
-        const failRecord = failRecordStr ? JSON.parse(failRecordStr) : { count: 0, lockUntil: 0 };
-
-        const nowMs = Date.now();
-        if (failRecord.lockUntil && nowMs < failRecord.lockUntil) {
-          const remainSec = Math.ceil((failRecord.lockUntil - nowMs) / 1000);
-          return new Response(JSON.stringify({
-            success: false,
-            message: `登入嘗試失敗次數過多！帳號已鎖定，請等待 ${remainSec} 秒後再試。`
-          }), {
-            status: 429,
             headers: getCorsHeaders(request)
           });
         }
@@ -356,11 +357,9 @@ export default {
             }
           }
 
-          // 處理密碼雜湊
-          for (let i = 0; i < incomingData[userKey].length; i++) {
-            const u = incomingData[userKey][i];
+          // [效能優化] 密碼雜湊平行處理 (Promise.all 取代逐一 await)
+          await Promise.all(incomingData[userKey].map(async (u) => {
             const oldU = oldUsersMap.get(u.id);
-
             if (u.password && u.password.trim() !== '') {
               u.password = await hashPassword(u.password);
             } else if (oldU && oldU.password) {
@@ -368,7 +367,7 @@ export default {
             } else {
               u.password = await hashPassword('admin');
             }
-          }
+          }));
         }
 
         await env.MEETING_DB.put('all_app_data', JSON.stringify(incomingData));
