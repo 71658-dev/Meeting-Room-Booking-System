@@ -612,7 +612,7 @@ END:VCALENDAR`;
             cleanupTurnstileWidget();
             container.innerHTML = '';
             currentTurnstileWidgetId = window.turnstile.render('#turnstile-container', {
-              sitekey: '0x4AAAAAAEGpkZprlggOYtpb',
+              sitekey: '0x4AAAAAAEHj2et8u57PV5z1',
               action: 'turnstile-spin-v2',
               theme: 'light'
             });
@@ -693,7 +693,7 @@ END:VCALENDAR`;
 
               <!-- Cloudflare Turnstile 防機器人驗證區塊 -->
               <div class="flex justify-center py-1">
-                <div id="turnstile-container" class="cf-turnstile" data-sitekey="0x4AAAAAAEGpkZprlggOYtpb" data-action="turnstile-spin-v2" data-theme="light"></div>
+                <div id="turnstile-container" class="cf-turnstile" data-sitekey="0x4AAAAAAEHj2et8u57PV5z1" data-action="turnstile-spin-v2" data-theme="light"></div>
               </div>
 
               <button type="submit"
