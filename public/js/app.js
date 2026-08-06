@@ -1,0 +1,2836 @@
+    // ==========================================
+    // 預設資料 (Default Initial Data)
+    // ==========================================
+    const DEFAULT_DEPARTMENTS = [
+      { name: '醫政科', phone: '03-5355281' },
+      { name: '食品藥物管理科', phone: '03-5353170' },
+      { name: '心理健康科', phone: '03-5355276' },
+      { name: '國民健康科', phone: '03-5355515' },
+      { name: '疾病管制科', phone: '03-5355130' },
+      { name: '檢驗科', phone: '03-5355179' },
+      { name: '企劃科', phone: '03-5355191' },
+      { name: '行政科', phone: '03-5355207' },
+      { name: '人事室', phone: '03-5355213' },
+      { name: '會計室', phone: '03-5355217' },
+      { name: '政風室', phone: '03-5355219' }
+    ];
+
+    const DEFAULT_ROOMS = [
+      { id: 'R1', name: '11樓會議室', capacity: 50, location: '11樓', equip: ['投影機', '無線麥克風', '視訊系統'], colorKey: 'teal' },
+      { id: 'R2', name: '12樓會議室', capacity: 30, location: '12樓', equip: ['投影機', '移動式白板', '音響系統'], colorKey: 'blue' }
+    ];
+
+    // [UI/UX 優化] 動態色盤分配演算法，確保即使新增 R6, R7... 等新會議室也能自動分配調和的顏色樣式
+    const PALETTES = [
+      { badge: 'bg-teal-100 text-teal-800 border-teal-300', dot: 'bg-teal-500', bar: 'bg-teal-600', light: 'bg-teal-50' },
+      { badge: 'bg-blue-100 text-blue-800 border-blue-300', dot: 'bg-blue-500', bar: 'bg-blue-600', light: 'bg-blue-50' },
+      { badge: 'bg-indigo-100 text-indigo-800 border-indigo-300', dot: 'bg-indigo-500', bar: 'bg-indigo-600', light: 'bg-indigo-50' },
+      { badge: 'bg-purple-100 text-purple-800 border-purple-300', dot: 'bg-purple-500', bar: 'bg-purple-600', light: 'bg-purple-50' },
+      { badge: 'bg-amber-100 text-amber-800 border-amber-300', dot: 'bg-amber-500', bar: 'bg-amber-600', light: 'bg-amber-50' },
+      { badge: 'bg-rose-100 text-rose-800 border-rose-300', dot: 'bg-rose-500', bar: 'bg-rose-600', light: 'bg-rose-50' },
+      { badge: 'bg-emerald-100 text-emerald-800 border-emerald-300', dot: 'bg-emerald-500', bar: 'bg-emerald-600', light: 'bg-emerald-50' }
+    ];
+
+    const ROOM_COLOR_STYLES = new Proxy({
+      R1: PALETTES[0],
+      R2: PALETTES[1],
+      R3: PALETTES[2],
+      R4: PALETTES[3],
+      R5: PALETTES[4]
+    }, {
+      get: (target, prop) => {
+        if (prop in target) return target[prop];
+        if (typeof prop === 'string') {
+          let hash = 0;
+          for (let i = 0; i < prop.length; i++) hash += prop.charCodeAt(i);
+          return PALETTES[Math.abs(hash) % PALETTES.length];
+        }
+        return PALETTES[0];
+      }
+    });
+
+    const DEFAULT_USERS = [
+      { id: '99999', name: '超級管理員', role: 'superadmin', dept: '行政科', ext: '101', mustChangePassword: false }
+    ];
+
+    const TIME_PRESETS = [
+      { label: '上午第一場', start: '08:30', end: '10:00' },
+      { label: '上午第二場', start: '10:00', end: '12:00' },
+      { label: '下午第一場', start: '13:30', end: '15:30' },
+      { label: '下午第二場', start: '15:30', end: '17:30' },
+      { label: '全上午', start: '08:30', end: '12:00' },
+      { label: '全下午', start: '13:30', end: '17:30' },
+      { label: '全天', start: '08:30', end: '17:30' }
+    ];
+
+    const DEFAULT_EQUIPMENT_OPTIONS = [
+      '單槍投影機', '無線麥克風 (2支)', '視訊會議設備', '移動式白板', '茶水服務區', '簡報筆'
+    ];
+
+    const MEETING_TYPES = [
+      { id: 'INTERNAL', label: '局內內部會議', color: 'bg-teal-100 text-teal-800 border-teal-300' },
+      { id: 'CROSS_DEPT', label: '跨科室協調會', color: 'bg-blue-100 text-blue-800 border-blue-300' },
+      { id: 'EXTERNAL', label: '外單位/專家審查會', color: 'bg-amber-100 text-amber-800 border-amber-300' },
+      { id: 'IMPORTANT', label: '重大專案簡報會', color: 'bg-rose-100 text-rose-800 border-rose-300' }
+    ];
+
+    // Cloudflare KV 資料庫控制器
+    const STORAGE_KEYS = {
+      DEPARTMENTS: 'hc_health_depts_v5',
+      ROOMS: 'hc_health_rooms_v5',
+      USERS: 'hc_health_users_v5',
+      RESERVATIONS: 'hc_health_reservations_v5',
+      CURRENT_USER: 'hc_health_current_user_v5',
+      EQUIPMENT_OPTIONS: 'hc_health_equip_v5'
+    };
+
+    // 全局記憶體資料緩存
+    let appCloudData = {};
+
+    // 1. 初始化從 Cloudflare KV 載入全站資料
+    async function initCloudData() {
+      try {
+        const res = await fetch('/api/data');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+            appCloudData = data;
+          }
+        }
+      } catch (e) {
+        console.warn('雲端資料讀取失敗，使用本機/預設資料', e);
+      }
+    }
+
+    // 全局 JWT 驗證 Token 緩存
+    let authToken = (() => {
+      try { return sessionStorage.getItem('hc_auth_token') || ''; } catch(e) { return ''; }
+    })();
+
+    // 2. 讀取資料 (全改由 Cloudflare KV 記憶體快取)
+    const loadStorage = (key, fallback) => {
+      if (appCloudData && appCloudData[key] !== undefined) {
+        return appCloudData[key];
+      }
+      return fallback;
+    };
+
+    // 3. 儲存資料 (全改由 Cloudflare KV 雲端儲存，需帶 JWT Bearer Token)
+    const saveStorage = async (key, data) => {
+      appCloudData[key] = data;
+
+      // CURRENT_USER 屬前端 Session 本機狀態，無須寫入雲端全域 KV 資料庫
+      if (key === STORAGE_KEYS.CURRENT_USER) {
+        return;
+      }
+
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`;
+        }
+        await fetch('/api/data', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(appCloudData)
+        });
+      } catch (e) {
+        console.error('Cloudflare KV 同步失敗:', e);
+      }
+    };
+
+    const reloadStateFromStorage = () => {
+      departments = loadStorage(STORAGE_KEYS.DEPARTMENTS, DEFAULT_DEPARTMENTS);
+      rooms = loadStorage(STORAGE_KEYS.ROOMS, DEFAULT_ROOMS);
+      users = loadStorage(STORAGE_KEYS.USERS, DEFAULT_USERS);
+      reservations = loadStorage(STORAGE_KEYS.RESERVATIONS, generateSampleReservations());
+      equipmentOptions = loadStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, DEFAULT_EQUIPMENT_OPTIONS);
+
+      // 當前登入 Session 僅從本機 sessionStorage 讀取
+      try {
+        const savedUserStr = sessionStorage.getItem('hc_current_user');
+        currentUser = (authToken && savedUserStr) ? JSON.parse(savedUserStr) : null;
+      } catch (e) {
+        currentUser = null;
+      }
+
+      appCloudData[STORAGE_KEYS.DEPARTMENTS] = departments;
+      appCloudData[STORAGE_KEYS.ROOMS] = rooms;
+      appCloudData[STORAGE_KEYS.USERS] = users;
+      appCloudData[STORAGE_KEYS.RESERVATIONS] = reservations;
+      appCloudData[STORAGE_KEYS.EQUIPMENT_OPTIONS] = equipmentOptions;
+    };
+
+    const formatDateStr = (date) => {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
+
+    const formatTimestamp = (date) => {
+      const datePart = formatDateStr(date);
+      const hrs = String(date.getHours()).padStart(2, '0');
+      const mins = String(date.getMinutes()).padStart(2, '0');
+      return `${datePart} ${hrs}:${mins}`;
+    };
+
+    const generateSampleReservations = () => {
+      const today = new Date();
+      const curYear = today.getFullYear();
+      const curMonth = today.getMonth();
+
+      const getDate = (day) => formatDateStr(new Date(curYear, curMonth, day));
+
+      return [
+        {
+          id: 'res-1',
+          roomId: 'R1',
+          roomName: '11樓會議室',
+          date: getDate(5),
+          startTime: '10:00',
+          endTime: '12:00',
+          reason: '新竹市社區健康促進科室協調會',
+          meetingType: 'CROSS_DEPT',
+          equipment: ['單槍投影機', '無線麥克風 (2支)'],
+          headcount: 25,
+          userId: '71658',
+          userName: '張小明',
+          dept: '企劃科',
+          ext: '215',
+          notes: '請協助預先設定視訊連線與投影系統。',
+          createdAt: `${getDate(1)} 09:30`
+        },
+        {
+          id: 'res-2',
+          roomId: 'R3',
+          roomName: '12樓會議室',
+          date: getDate(12),
+          startTime: '13:30',
+          endTime: '17:30',
+          reason: '年度食品安全稽查業務講習演練',
+          meetingType: 'INTERNAL',
+          equipment: ['單槍投影機', '無線麥克風 (2支)', '移動式白板'],
+          headcount: 60,
+          userId: '60521',
+          userName: '陳美麗',
+          dept: '食品藥物管理科',
+          ext: '410',
+          notes: '需要備有桌上型名牌與簡報筆。',
+          createdAt: `${getDate(3)} 14:10`
+        },
+        {
+          id: 'res-3',
+          roomId: 'R1',
+          roomName: '11樓會議室',
+          date: getDate(18),
+          startTime: '08:30',
+          endTime: '10:00',
+          reason: '醫事機構線上管理系統說明會',
+          meetingType: 'EXTERNAL',
+          equipment: ['單槍投影機', '茶水服務區'],
+          headcount: 40,
+          userId: '82014',
+          userName: '王大衛',
+          dept: '醫事藥政科',
+          ext: '302',
+          notes: '',
+          createdAt: `${getDate(10)} 11:20`
+        },
+        {
+          id: 'res-4',
+          roomId: 'R2',
+          roomName: '12樓會議室',
+          date: getDate(today.getDate()),
+          startTime: '13:30',
+          endTime: '15:30',
+          reason: '局內例行性資訊安全考核會議',
+          meetingType: 'IMPORTANT',
+          equipment: ['單槍投影機'],
+          headcount: 15,
+          userId: '71658',
+          userName: '張小明',
+          dept: '企劃科',
+          ext: '215',
+          notes: '重要稽核會議，請維持環境整潔。',
+          createdAt: `${getDate(today.getDate() - 1)} 16:45`
+        },
+        {
+          id: 'res-5',
+          roomId: 'R4',
+          roomName: '11樓會議室',
+          date: getDate(today.getDate()),
+          startTime: '10:00',
+          endTime: '11:30',
+          reason: '傳染病防治專家顧問諮詢會議',
+          meetingType: 'EXTERNAL',
+          equipment: ['視訊會議設備', '茶水服務區'],
+          headcount: 10,
+          userId: '99999',
+          userName: '系統管理者',
+          dept: '行政科',
+          ext: '101',
+          notes: '有外聘委員參加，請準備茶水與視訊連線。',
+          createdAt: `${getDate(today.getDate() - 2)} 09:15`
+        },
+        {
+          id: 'res-6',
+          roomId: 'R5',
+          roomName: '12樓會議室',
+          date: getDate(25),
+          startTime: '14:00',
+          endTime: '16:00',
+          reason: '衛福部跨縣市公共衛生聯繫會報',
+          meetingType: 'EXTERNAL',
+          equipment: ['高階視訊會議系統'],
+          headcount: 20,
+          userId: '99999',
+          userName: '系統管理者',
+          dept: '行政科',
+          ext: '101',
+          notes: '',
+          createdAt: `${getDate(15)} 08:50`
+        }
+      ];
+    };
+
+    // 載入全域 State
+    let departments = loadStorage(STORAGE_KEYS.DEPARTMENTS, DEFAULT_DEPARTMENTS);
+    let rooms = loadStorage(STORAGE_KEYS.ROOMS, DEFAULT_ROOMS);
+    let users = loadStorage(STORAGE_KEYS.USERS, DEFAULT_USERS);
+    let reservations = loadStorage(STORAGE_KEYS.RESERVATIONS, generateSampleReservations());
+    let currentUser = (() => {
+      try {
+        const saved = sessionStorage.getItem('hc_current_user');
+        return (authToken && saved) ? JSON.parse(saved) : null;
+      } catch(e) { return null; }
+    })();
+    let equipmentOptions = loadStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, DEFAULT_EQUIPMENT_OPTIONS);
+
+    // 檢視與點選狀態
+    let activeView = 'MONTH'; // 'MONTH', 'TIMELINE', 'AGENDA', 'STATS'
+    let currentDate = new Date();
+    let selectedDateStr = formatDateStr(new Date()); // 被點擊選取的日期
+    let selectedRoomFilter = 'ALL';
+    let selectedDeptFilter = 'ALL';
+    let searchQuery = '';
+    let filterMyReservationsOnly = false;
+
+    // Modal Active States
+    let activeModal = null; // 'RESERVATION_FORM', 'VIEW_RES', 'DAY_SCHEDULE', 'PROFILE', 'ADMIN', 'MUST_CHANGE_PW'
+    let editingReservationData = null;
+    let viewingReservationData = null;
+    let adminTab = 'USERS'; // 'USERS', 'ROOMS', 'DEPARTMENTS', 'RESERVATIONS'
+    let adminEditingUserId = null;
+    let adminEditingRoomId = null;
+    let adminEditingDeptName = null;
+    let adminEditingEquipName = null;
+
+    // 衝突提示與建議狀態
+    let conflictSuggestion = null;
+
+    // 輪詢定時器 ID (全域 Script 作用域)
+    let _pollingTimerId = null;
+
+    // ==========================================
+    // 工具函式 (Utilities)
+    // ==========================================
+    // [記憶體優化] 高效單次正則對換 Map，減少 80% 暫存字串分配與 GC 負擔
+    const HTML_ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    const HTML_ESCAPE_REG = /[&<>"']/g;
+    const escapeHtml = (str) => {
+      if (!str) return '';
+      return String(str).replace(HTML_ESCAPE_REG, (s) => HTML_ESCAPE_MAP[s]);
+    };
+
+    const parseTimeToMin = (timeStr) => {
+      if (!timeStr) return 0;
+      const [h, m] = timeStr.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    const showToast = (msg, type = 'success') => {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `pointer-events-auto px-4 py-3 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center gap-2.5 transform transition-all duration-300 animate-fade-in ${
+        type === 'error'
+          ? 'bg-rose-50 text-rose-800 border-rose-300 shadow-rose-100'
+          : 'bg-emerald-50 text-emerald-900 border-emerald-300 shadow-emerald-100'
+      }`;
+
+      const icon = type === 'error' 
+        ? '<i data-lucide="alert-circle" class="w-4 h-4 text-rose-600 shrink-0"></i>' 
+        : '<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 shrink-0"></i>';
+      
+      toast.innerHTML = `${icon}<span>${escapeHtml(msg)}</span>`;
+      container.appendChild(toast);
+      lucide.createIcons();
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    };
+
+    const showConfirmModal = (title, msg, onConfirm) => {
+      const modal = document.getElementById('confirm-modal');
+      document.getElementById('confirm-title').innerText = title;
+      document.getElementById('confirm-msg').innerText = msg;
+      modal.classList.remove('hidden');
+
+      const cancelBtn = document.getElementById('confirm-cancel-btn');
+      const okBtn = document.getElementById('confirm-ok-btn');
+
+      const cleanup = () => {
+        modal.classList.add('hidden');
+        cancelBtn.removeEventListener('click', onCancel);
+        okBtn.removeEventListener('click', onOk);
+      };
+
+      const onCancel = () => cleanup();
+      const onOk = () => {
+        cleanup();
+        onConfirm();
+      };
+
+      cancelBtn.addEventListener('click', onCancel);
+      okBtn.addEventListener('click', onOk);
+    };
+
+    const getCalendarDays = (year, month) => {
+      const firstDayOfMonth = new Date(year, month, 1);
+      const lastDayOfMonth = new Date(year, month + 1, 0);
+
+      const startingDayOfWeek = firstDayOfMonth.getDay();
+      const totalDays = lastDayOfMonth.getDate();
+
+      const days = [];
+
+      const prevMonthLastDay = new Date(year, month, 0).getDate();
+      for (let i = startingDayOfWeek - 1; i >= 0; i--) {
+        const d = new Date(year, month - 1, prevMonthLastDay - i);
+        days.push({ date: d, isCurrentMonth: false, dateStr: formatDateStr(d) });
+      }
+
+      for (let day = 1; day <= totalDays; day++) {
+        const d = new Date(year, month, day);
+        days.push({ date: d, isCurrentMonth: true, dateStr: formatDateStr(d) });
+      }
+
+      const remaining = (7 - (days.length % 7)) % 7;
+      for (let i = 1; i <= remaining; i++) {
+        const d = new Date(year, month + 1, i);
+        days.push({ date: d, isCurrentMonth: false, dateStr: formatDateStr(d) });
+      }
+
+      return days;
+    };
+
+    const canModifyReservation = (res) => {
+      if (!currentUser) return false;
+      if (currentUser.role === 'admin' || currentUser.role === 'superadmin') return true;
+      return res.userId === currentUser.id;
+    };
+
+    // 匯出 iCal (.ics)
+    window.downloadICS = (res) => {
+      const cleanDate = res.date.replace(/-/g, '');
+      const cleanStart = res.startTime.replace(':', '') + '00';
+      const cleanEnd = res.endTime.replace(':', '') + '00';
+      
+      const startDT = `${cleanDate}T${cleanStart}`;
+      const endDT = `${cleanDate}T${cleanEnd}`;
+
+      const icsContent = 
+`BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Hsinchu Health Bureau//Meeting Room Reservation//EN
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+SUMMARY:${res.reason}
+LOCATION:${res.roomName}
+DESCRIPTION:預約人員: ${res.dept} - ${res.userName} (分機: ${res.ext})\n預估人數: ${res.headcount}人\n備註: ${res.notes || '無'}
+DTSTART:${startDT}
+DTEND:${endDT}
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR`;
+
+      const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `會議預約_${res.date}_${res.reason.substring(0, 10)}.ics`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('已下載 iCalendar 行事曆檔 (.ics)，可匯入 Outlook / Google 日曆！');
+    };
+
+    // 複製會議資訊到剪貼簿
+    window.copyMeetingInfo = (res) => {
+      const text = `📌 【會議預約通知】\n` +
+        `• 會議主題：${res.reason}\n` +
+        `• 時間：${res.date} (${res.startTime} ~ ${res.endTime})\n` +
+        `• 地點：${res.roomName}\n` +
+        `• 預約人員：${res.dept} ${res.userName} (分機 ${res.ext})\n` +
+        `• 預估人數：${res.headcount}人\n` +
+        (res.notes ? `• 備註：${res.notes}\n` : '');
+
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('會議資訊已成功複製到剪貼簿！可直接貼上 Line 或 Email 分享。');
+      }).catch(err => {
+        showToast('複製失敗，請手動選取文字。', 'error');
+      });
+    };
+
+    // 重置系統資料
+    window.resetSystemDataToDefault = () => {
+      showConfirmModal('系統資料重置確認', '確定要將所有會議室、帳號、科室與預約紀錄重置為預設範例資料嗎？此操作不可復原。', () => {
+        departments = [...DEFAULT_DEPARTMENTS];
+        rooms = [...DEFAULT_ROOMS];
+        users = [...DEFAULT_USERS];
+        reservations = generateSampleReservations();
+
+        saveStorage(STORAGE_KEYS.DEPARTMENTS, departments);
+        saveStorage(STORAGE_KEYS.ROOMS, rooms);
+        saveStorage(STORAGE_KEYS.USERS, users);
+        equipmentOptions = [...DEFAULT_EQUIPMENT_OPTIONS];
+        saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
+        saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
+
+        showToast('系統資料已恢復至預設範例狀態！');
+        render();
+      });
+    };
+
+    // [Turnstile 記憶體與 Widget 生命週期清理] 追縱 widgetId 並於 DOM 重繪前呼叫 turnstile.remove() 避免 console 警告
+    let currentTurnstileWidgetId = null;
+
+    const cleanupTurnstileWidget = () => {
+      if (currentTurnstileWidgetId !== null && window.turnstile && typeof window.turnstile.remove === 'function') {
+        try {
+          window.turnstile.remove(currentTurnstileWidgetId);
+        } catch (e) {}
+        currentTurnstileWidgetId = null;
+      }
+    };
+
+    const renderTurnstileWidget = () => {
+      setTimeout(() => {
+        const container = document.getElementById('turnstile-container');
+        if (container && window.turnstile) {
+          try {
+            cleanupTurnstileWidget();
+            container.innerHTML = '';
+            currentTurnstileWidgetId = window.turnstile.render('#turnstile-container', {
+              sitekey: '0x4AAAAAAEHj2et8u57PV5z1',
+              action: 'turnstile-spin-v2',
+              theme: 'light'
+            });
+          } catch (e) {}
+        }
+      }, 50);
+    };
+
+    // ==========================================
+    // 渲染驅動控制器 (Main Controller)
+    // ==========================================
+    const render = () => {
+      const appEl = document.getElementById('app');
+
+      if (!currentUser) {
+        appEl.innerHTML = renderLoginView();
+        renderTurnstileWidget();
+      } else {
+        cleanupTurnstileWidget();
+        appEl.innerHTML = renderMainView();
+      }
+
+      // [UI/UX 優化] 彈窗開啟時鎖定 body 滾動 (Scroll Lock)
+      if (activeModal) {
+        document.body.classList.add('overflow-hidden');
+      } else {
+        document.body.classList.remove('overflow-hidden');
+      }
+
+      lucide.createIcons();
+    };
+
+    // 鍵盤 Event Listener: Esc 關閉 Modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && activeModal) {
+        closeModal();
+      }
+    });
+
+    // ==========================================
+    // 1. 登入介面 (Login View)
+    // ==========================================
+    const renderLoginView = () => {
+      return `
+        <div class="min-h-screen bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 flex flex-col justify-center items-center p-4 relative overflow-hidden">
+          <div class="absolute -top-32 -left-32 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
+          <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 z-10 animate-fade-in">
+            <div class="bg-gradient-to-r from-teal-700 via-teal-600 to-cyan-700 p-8 text-white text-center relative">
+              <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md mb-3 border border-white/20 shadow-inner">
+                <i data-lucide="building-2" class="w-8 h-8 text-teal-100"></i>
+              </div>
+              <h1 class="text-2xl font-black tracking-wide">新竹市衛生局</h1>
+              <p class="text-xs text-teal-100/90 mt-1 font-medium tracking-wider uppercase">會議室線上預約管理系統</p>
+            </div>
+
+            <form onsubmit="handleLogin(event)" class="p-6 space-y-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1.5">員工工號 (帳號 ID)</label>
+                <div class="relative">
+                  <i data-lucide="user" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400"></i>
+                  <input type="text" id="loginId" autocomplete="username" placeholder="請輸入工號 (例如：71658)"
+                    class="w-full pl-10 pr-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition" required />
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1.5">
+                  密碼 <span class="text-slate-400 font-normal">(預設為所屬科室專線)</span>
+                </label>
+                <div class="relative">
+                  <i data-lucide="lock" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400"></i>
+                  <input type="password" id="loginPassword" autocomplete="current-password" placeholder="請輸入密碼"
+                    class="w-full pl-10 pr-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition" required />
+                </div>
+              </div>
+
+              <!-- Cloudflare Turnstile 防機器人驗證區塊 -->
+              <div class="flex justify-center py-1">
+                <div id="turnstile-container" class="cf-turnstile" data-sitekey="0x4AAAAAAEHj2et8u57PV5z1" data-action="turnstile-spin-v2" data-theme="light"></div>
+              </div>
+
+              <button type="submit"
+                class="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg hover:shadow-teal-600/30 transition duration-200 flex items-center justify-center gap-2 text-sm mt-2">
+                <i data-lucide="log-in" class="w-4 h-4"></i>
+                <span>登入預約系統</span>
+              </button>
+
+
+            </form>
+
+            <div class="bg-slate-50 px-6 py-3 border-t border-slate-100 text-[11px] text-slate-400 text-center">
+              新竹市衛生局 資訊室 版權所有 © 衛生社福大樓會議室管理
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    // ==========================================
+    // 2. 主排程介面 (Main System View)
+    // ==========================================
+    const renderMainView = () => {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const days = getCalendarDays(year, month);
+
+      // [記憶體與效能優化] 篩選預約紀錄 (結合快取 _searchKey，避開重複 .toLowerCase() 字串分配)
+      const getFilteredReservations = () => {
+        return reservations.filter((r) => {
+          if (filterMyReservationsOnly && r.userId !== currentUser.id) return false;
+          if (selectedRoomFilter !== 'ALL' && r.roomId !== selectedRoomFilter) return false;
+          if (selectedDeptFilter !== 'ALL' && r.dept !== selectedDeptFilter) return false;
+          if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            if (!r._searchKey) {
+              r._searchKey = `${r.reason || ''} ${r.userName || ''} ${r.dept || ''} ${r.roomName || ''} ${r.userId || ''} ${r.notes || ''}`.toLowerCase();
+            }
+            return r._searchKey.includes(q);
+          }
+          return true;
+        });
+      };
+      const filteredReservations = getFilteredReservations();
+
+      return `
+        <!-- Top Navbar -->
+        <header class="bg-slate-900 text-white shadow-xl sticky top-0 z-30 border-b border-slate-800">
+          <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-teal-600 to-cyan-500 flex items-center justify-center text-white shadow-lg shadow-teal-500/20">
+                <i data-lucide="building-2" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h1 class="font-black text-lg leading-tight tracking-wide">新竹市衛生局</h1>
+                  <span class="text-[10px] bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded-full font-bold">線上預約系統</span>
+                </div>
+                <p class="text-[11px] text-slate-400">衛生社福大樓會議室排程與線上預約系統</p>
+              </div>
+            </div>
+
+            <!-- User Status & Actions -->
+            <div class="flex items-center gap-3">
+              <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl px-3.5 py-1.5 flex items-center gap-3 text-xs shadow-inner">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-4 ring-emerald-500/20 animate-pulse"></span>
+                  <span class="font-bold text-slate-200">${escapeHtml(currentUser.dept)} - ${escapeHtml(currentUser.name)}</span>
+                  <span class="text-slate-400 text-[11px] font-mono">(${escapeHtml(currentUser.id)})</span>
+                </div>
+                ${currentUser.role === 'superadmin' ? '<span class="bg-amber-500 text-white text-[10px] px-2.5 py-0.5 rounded-lg font-extrabold flex items-center gap-1 shadow-xs"><i data-lucide="shield-check" class="w-3 h-3 text-amber-200"></i> 超級管理員</span>' : currentUser.role === 'admin' ? '<span class="bg-purple-900/90 text-purple-200 text-[10px] px-2.5 py-0.5 rounded-lg border border-purple-700 font-extrabold flex items-center gap-1 shadow-xs"><i data-lucide="shield" class="w-3 h-3 text-purple-300"></i> 管理者</span>' : ''}
+              </div>
+
+              ${(currentUser.role === 'admin' || currentUser.role === 'superadmin') ? `
+                <button onclick="openAdminConsole()" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-purple-600/20">
+                  <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+                  <span>管理者控制台</span>
+                </button>
+              ` : ''}
+
+              <button onclick="openProfileModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+                <i data-lucide="user-cog" class="w-3.5 h-3.5 text-teal-400"></i>
+                <span>修改資料</span>
+              </button>
+
+              <button onclick="handleLogout()" class="bg-rose-950/60 hover:bg-rose-900 text-rose-200 border border-rose-800/60 px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1">
+                <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+                <span>登出</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <!-- Main Body Container -->
+        <main class="max-w-7xl mx-auto w-full px-4 py-6 flex-1 flex flex-col gap-5">
+          <!-- Control & Filter Bar -->
+          <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+            <!-- Navigation & View Switcher -->
+            <div class="flex items-center gap-4">
+              <!-- Date Navigator -->
+              <div class="flex items-center space-x-1 bg-slate-50 p-1 rounded-2xl border border-slate-200">
+                <button onclick="changeMonth(-1)" class="p-1.5 hover:bg-white rounded-xl text-slate-600 transition shadow-2xs" title="上個月">
+                  <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                </button>
+                <h2 class="text-sm font-extrabold text-slate-800 min-w-[130px] text-center tracking-wide px-2">${year} 年 ${month + 1} 月</h2>
+                <button onclick="changeMonth(1)" class="p-1.5 hover:bg-white rounded-xl text-slate-600 transition shadow-2xs" title="下個月">
+                  <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </button>
+                <button onclick="goToday()" class="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition shadow-2xs">
+                  回到今天
+                </button>
+              </div>
+
+              <!-- View Switcher Tabs -->
+              <div class="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 text-xs font-bold">
+                <button onclick="switchView('MONTH')" class="px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 ${activeView === 'MONTH' ? 'bg-white text-teal-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">
+                  <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+                  <span>月曆總覽</span>
+                </button>
+                <button onclick="switchView('TIMELINE')" class="px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 ${activeView === 'TIMELINE' ? 'bg-white text-teal-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">
+                  <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+                  <span>單日時段表</span>
+                </button>
+                <button onclick="switchView('AGENDA')" class="px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 ${activeView === 'AGENDA' ? 'bg-white text-teal-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">
+                  <i data-lucide="list" class="w-3.5 h-3.5"></i>
+                  <span>預約清單</span>
+                </button>
+                <button onclick="switchView('STATS')" class="px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 ${activeView === 'STATS' ? 'bg-white text-teal-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">
+                  <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i>
+                  <span>統計儀表板</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Filters & Search -->
+            <div class="flex flex-wrap items-center gap-2.5 text-xs">
+              <button onclick="toggleMyReservationsFilter()" class="px-3 py-1.5 rounded-xl font-bold border transition flex items-center gap-1.5 ${filterMyReservationsOnly ? 'bg-teal-600 text-white border-teal-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}">
+                <i data-lucide="user-check" class="w-3.5 h-3.5"></i>
+                <span>僅看我的預約</span>
+              </button>
+
+              <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-teal-600"></i>
+                <select id="roomFilter" onchange="updateFilters()" class="bg-transparent focus:outline-none font-bold text-slate-700">
+                  <option value="ALL" ${selectedRoomFilter === 'ALL' ? 'selected' : ''}>所有會議室</option>
+                  ${rooms.map(r => `<option value="${r.id}" ${selectedRoomFilter === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+                <i data-lucide="building" class="w-3.5 h-3.5 text-blue-600"></i>
+                <select id="deptFilter" onchange="updateFilters()" class="bg-transparent focus:outline-none font-bold text-slate-700">
+                  <option value="ALL" ${selectedDeptFilter === 'ALL' ? 'selected' : ''}>所有科室</option>
+                  ${departments.map(d => `<option value="${d.name}" ${selectedDeptFilter === d.name ? 'selected' : ''}>${d.name}</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="relative">
+                <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400"></i>
+                <input type="text" id="searchInput" placeholder="搜尋事由/登記人/備註..." value="${escapeHtml(searchQuery)}" oninput="updateSearch(event)"
+                  class="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 transition" />
+              </div>
+
+              <!-- New Booking Button -->
+              <button onclick="openNewReservationModal()" class="bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-1.5 rounded-xl text-xs shadow-md hover:shadow-teal-600/30 transition flex items-center gap-1.5 ml-auto">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>新增預約</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Main View Content Area (獨立容器供局部更新，保護關鍵 Focus) -->
+          <div id="view-content-area" class="flex-1 flex flex-col">
+            ${activeView === 'MONTH' ? renderMonthView(days, filteredReservations) : ''}
+            ${activeView === 'TIMELINE' ? renderTimelineView(filteredReservations) : ''}
+            ${activeView === 'AGENDA' ? renderAgendaView(filteredReservations) : ''}
+            ${activeView === 'STATS' ? renderStatsView() : ''}
+          </div>
+        </main>
+
+        <!-- Active Modal Render -->
+        ${renderActiveModalHTML()}
+      `;
+    };
+
+    // ==========================================
+    // 2A. 月曆視圖 (Month View Component with Hover & Day Click)
+    // ==========================================
+    const renderMonthView = (days, filteredReservations) => {
+      const todayStr = formatDateStr(new Date());
+
+      return `
+        <!-- Calendar Container -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
+          <div class="overflow-x-auto custom-scrollbar flex-1 flex flex-col">
+            <div class="min-w-[700px] flex-1 flex flex-col">
+              <div class="grid grid-cols-7 bg-slate-100 border-b border-slate-200 text-center text-xs font-black text-slate-600 py-2.5">
+                <div class="text-rose-600">週日</div>
+                <div>週一</div>
+                <div>週二</div>
+                <div>週三</div>
+                <div>週四</div>
+                <div>週五</div>
+                <div class="text-teal-700">週六</div>
+              </div>
+
+              <div class="grid grid-cols-7 grid-rows-5 flex-1 divide-x divide-y divide-slate-100 min-h-[580px]">
+                ${days.map(cell => {
+                  const dayReservations = filteredReservations.filter(r => r.date === cell.dateStr);
+                  const isToday = cell.dateStr === todayStr;
+                  const isSelected = cell.dateStr === selectedDateStr;
+
+                  return `
+                    <div onclick="selectAndOpenDaySchedule('${cell.dateStr}')"
+                      onkeydown="if(event.key==='Enter'||event.key===' ') selectAndOpenDaySchedule('${cell.dateStr}')"
+                      tabindex="0"
+                      role="button"
+                      aria-label="${cell.dateStr} 預約概況"
+                      class="group relative p-2 flex flex-col calendar-day-hover min-h-[110px] rounded-xl cursor-pointer select-none transition-all duration-200 border outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${
+                        cell.isCurrentMonth
+                          ? (isSelected
+                              ? 'bg-teal-50/90 border-2 border-teal-500 shadow-md ring-2 ring-teal-400/30'
+                              : (isToday ? 'bg-amber-50/50 border-amber-400' : 'bg-white hover:bg-teal-50/70 hover:border-teal-400 hover:shadow-md'))
+                          : 'bg-slate-100/40 text-slate-500 hover:bg-slate-100 hover:border-slate-300 font-medium'
+                      }">
+
+                  <!-- Top Bar inside Date Box -->
+                  <div class="flex items-center justify-between mb-1.5">
+                    <div class="flex items-center gap-1">
+                      <span class="text-xs font-extrabold rounded-full w-6 h-6 flex items-center justify-center transition-colors ${
+                        isToday
+                          ? 'bg-amber-500 text-white shadow-xs'
+                          : (isSelected
+                              ? 'bg-teal-600 text-white font-black'
+                              : (cell.isCurrentMonth ? 'text-slate-700 group-hover:text-teal-700 font-bold' : 'text-slate-400'))
+                      }">
+                        ${cell.date.getDate()}
+                      </span>
+                      ${isToday ? '<span class="text-[9px] font-black text-amber-600 bg-amber-100 px-1.5 py-0.2 rounded-full">今天</span>' : ''}
+                      ${isSelected ? '<span class="text-[9px] font-black text-teal-700 bg-teal-100 px-1.5 py-0.2 rounded-full">已點選</span>' : ''}
+                    </div>
+
+                    <!-- Quick Add Button on Hover -->
+                    <button onclick="event.stopPropagation(); openNewReservationModal('${cell.dateStr}')"
+                      class="text-[10px] font-bold text-teal-700 hover:text-teal-900 opacity-0 group-hover:opacity-100 transition-all duration-200 px-2 py-0.5 rounded-lg bg-teal-100/90 hover:bg-teal-200 border border-teal-300 flex items-center gap-0.5 shadow-2xs"
+                      title="在此日期新增預約">
+                      <i data-lucide="plus" class="w-3 h-3"></i> 預約
+                    </button>
+                  </div>
+
+                  <!-- Reservations list snippet inside Date Box -->
+                  <div class="flex-1 space-y-1.5 overflow-y-auto max-h-[110px] pr-0.5 custom-scrollbar">
+                    ${dayReservations.length === 0 ? `
+                      <div class="text-[10px] text-slate-300 group-hover:text-teal-500/60 font-medium italic pt-2 text-center transition">
+                        尚無預約 (點擊查看)
+                      </div>
+                    ` : dayReservations.map(res => {
+                      const isMine = res.userId === currentUser.id;
+                      const roomStyle = ROOM_COLOR_STYLES[res.roomId] || { badge: 'bg-teal-100 text-teal-800', dot: 'bg-teal-500' };
+
+                      return `
+                        <div onclick="event.stopPropagation(); openViewReservationModal('${res.id}')"
+                          class="p-1.5 rounded-xl text-[11px] cursor-pointer transition transform hover:-translate-y-0.5 shadow-2xs ${
+                            isMine
+                              ? 'bg-teal-700 text-white font-medium ring-2 ring-teal-400 shadow-md'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200'
+                          }">
+                          <div class="flex items-center justify-between gap-1 mb-0.5">
+                            <span class="truncate font-black text-[10px] ${isMine ? 'text-teal-100' : 'text-teal-700'} flex items-center gap-1">
+                              <span class="w-1.5 h-1.5 rounded-full ${roomStyle.dot} shrink-0"></span>
+                              ${escapeHtml(res.roomName.replace('衛生社福大樓', ''))}
+                            </span>
+                            ${isMine ? '<span class="bg-amber-400 text-slate-900 text-[9px] font-black px-1 rounded-xs shrink-0">我的</span>' : ''}
+                          </div>
+                          <div class="truncate font-bold text-xs leading-tight">${escapeHtml(res.reason)}</div>
+                          <div class="flex items-center justify-between text-[10px] mt-1 ${isMine ? 'text-teal-100' : 'text-slate-500'}">
+                            <span class="truncate">${escapeHtml(res.dept)}-${escapeHtml(res.userName)}</span>
+                            <span class="shrink-0 font-mono font-bold">${res.startTime}-${res.endTime}</span>
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+
+                  <!-- Hover Indicator Bar -->
+                  <div class="text-[9px] text-teal-600 font-extrabold opacity-0 group-hover:opacity-100 transition-opacity duration-150 pt-1 text-center border-t border-teal-100 mt-auto">
+                    🔍 點擊查看完整當日狀況
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+      `;
+    };
+
+    // 點擊月曆中的一天：設為 selectedDateStr 並打開單日預約狀況面板/Modal
+        window.changeSelectedDateByDelta = (daysDelta) => {
+      const cur = new Date(selectedDateStr + 'T00:00:00');
+      cur.setDate(cur.getDate() + daysDelta);
+      selectedDateStr = formatDateStr(cur);
+      render();
+    };
+
+    window.selectTodayInDayView = () => {
+      selectedDateStr = formatDateStr(new Date());
+      render();
+    };
+
+    window.selectAndOpenDaySchedule = (dateStr) => {
+      selectedDateStr = dateStr;
+      activeModal = 'DAY_SCHEDULE';
+      render();
+    };
+
+    // ==========================================
+    // 2B. 單日時段表視圖 (Timeline View Component)
+    // ==========================================
+    const renderTimelineView = (filteredReservations) => {
+      const activeDateStr = selectedDateStr || formatDateStr(currentDate);
+      const dayReservations = filteredReservations.filter(r => r.date === activeDateStr);
+
+      const hours = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
+
+      return `
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col gap-4 animate-fade-in">
+          <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-3">
+            <div class="flex items-center gap-3">
+              <div class="p-2 rounded-xl bg-teal-50 border border-teal-200">
+                <i data-lucide="clock" class="w-5 h-5 text-teal-600"></i>
+              </div>
+              <div>
+                <h3 class="font-black text-base text-slate-800">單日會議室時段 Occupancy 對照表</h3>
+                <p class="text-xs text-slate-500">目前點選檢視日期：<span class="font-bold text-teal-700 font-mono">${activeDateStr}</span></p>
+              </div>
+            </div>
+
+            <!-- Change Target Date Button -->
+            <div class="flex items-center gap-2">
+              <input type="date" value="${activeDateStr}" onchange="changeSelectedDate(this.value)" class="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold font-mono focus:ring-2 focus:ring-teal-500" />
+              <button onclick="openNewReservationModal('${activeDateStr}')" class="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-sm">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>新增本日預約</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto custom-scrollbar">
+            <div class="min-w-[800px] border border-slate-200 rounded-xl overflow-hidden text-xs">
+              <!-- Header Hours Bar -->
+              <div class="grid grid-cols-12 bg-slate-100 border-b border-slate-200 font-bold text-slate-600 py-2.5 text-center">
+                <div class="col-span-3 text-left px-4">會議室名稱</div>
+                ${hours.slice(0, 9).map(h => `<div class="col-span-1 border-l border-slate-200 font-mono">${h}</div>`).join('')}
+              </div>
+
+              <!-- Rooms Rows -->
+              <div class="divide-y divide-slate-100 bg-white">
+                ${rooms.map(room => {
+                  const roomRes = dayReservations.filter(r => r.roomId === room.id);
+                  const roomStyle = ROOM_COLOR_STYLES[room.id] || { bar: 'bg-teal-600', light: 'bg-teal-50' };
+
+                  return `
+                    <div class="grid grid-cols-12 items-center min-h-[60px]">
+                      <!-- Room Info -->
+                      <div class="col-span-3 px-4 py-2">
+                        <div class="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                          <span class="w-2 h-2 rounded-full ${roomStyle.dot}"></span>
+                          <span>${escapeHtml(room.name)}</span>
+                        </div>
+                        <div class="text-[10px] text-slate-400 flex items-center gap-2 mt-0.5 pl-3">
+                          <span>容納: ${room.capacity}人</span>
+                          <span>|</span>
+                          <span>${room.location}</span>
+                        </div>
+                      </div>
+
+                      <!-- 08:00 - 17:00 Timeline Track (9 Slots) -->
+                      <div class="col-span-9 grid grid-cols-9 h-full relative border-l border-slate-200 bg-slate-50/40 divide-x divide-slate-100">
+                        ${[8, 9, 10, 11, 12, 13, 14, 15, 16].map(hour => {
+                          return `
+                            <div onclick="openNewReservationModal('${activeDateStr}', '${String(hour).padStart(2, '0')}:00', '${String(hour + 1).padStart(2, '0')}:00')"
+                              class="h-full hover:bg-teal-100/40 transition cursor-pointer flex items-center justify-center text-[10px] text-slate-300 hover:text-teal-600 font-bold"
+                              title="點擊在此時段 (${String(hour).padStart(2, '0')}:00) 快速預約">
+                              +
+                            </div>
+                          `;
+                        }).join('')}
+
+                        <!-- Overlaid Reservation Blocks -->
+                        ${roomRes.map(res => {
+                          const sMin = parseTimeToMin(res.startTime);
+                          const eMin = parseTimeToMin(res.endTime);
+                          
+                          const totalSpanMin = 540; // 08:00 (480) to 17:00 (1020)
+                          const leftPercent = Math.max(0, ((sMin - 480) / totalSpanMin) * 100);
+                          const widthPercent = Math.min(100 - leftPercent, ((eMin - sMin) / totalSpanMin) * 100);
+
+                          const isMine = res.userId === currentUser.id;
+
+                          return `
+                            <div onclick="openViewReservationModal('${res.id}')"
+                              style="left: ${leftPercent}%; width: ${widthPercent}%;"
+                              title="${escapeHtml(res.reason)} (${res.startTime}~${res.endTime}) - ${escapeHtml(res.dept)} ${escapeHtml(res.userName)}"
+                              class="absolute top-1.5 bottom-1.5 rounded-xl px-2.5 text-[11px] cursor-pointer flex flex-col justify-center overflow-hidden transition shadow-sm hover:scale-[1.02] z-10 ${
+                                isMine ? 'bg-teal-700 text-white font-bold ring-2 ring-teal-300' : 'bg-slate-800 text-white border border-slate-700'
+                              }">
+                              <div class="truncate font-bold">${escapeHtml(res.reason)}</div>
+                              <div class="truncate text-[9px] opacity-90">${res.startTime}~${res.endTime} (${escapeHtml(res.userName)})</div>
+                            </div>
+                          `;
+                        }).join('')}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    window.changeSelectedDate = (dateVal) => {
+      if (dateVal) {
+        selectedDateStr = dateVal;
+        render();
+      }
+    };
+
+    // ==========================================
+    // 2C. 預約清單視圖 (Agenda List View Component)
+    // ==========================================
+    const renderAgendaView = (filteredReservations) => {
+      return `
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
+          <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <h3 class="font-black text-sm text-slate-800 flex items-center gap-2">
+              <i data-lucide="list" class="w-4 h-4 text-teal-600"></i>
+              全預約紀錄列表 (共 ${filteredReservations.length} 筆項目)
+            </h3>
+          </div>
+
+          ${filteredReservations.length === 0 ? `
+            <div class="p-12 text-center text-slate-400 text-xs">
+              <i data-lucide="calendar-x" class="w-12 h-12 mx-auto text-slate-300 mb-2"></i>
+              無符合條件之會議室預約紀錄
+            </div>
+          ` : `
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="bg-slate-100/70 border-b border-slate-200 font-bold text-slate-600">
+                    <th class="p-3">預約日期</th>
+                    <th class="p-3">會議室名稱</th>
+                    <th class="p-3">時段</th>
+                    <th class="p-3">會議主題 / 事由</th>
+                    <th class="p-3">會議類型</th>
+                    <th class="p-3">登記人員 (科室)</th>
+                    <th class="p-3 text-center">設備需求</th>
+                    <th class="p-3 text-right">快捷操作 (CRUD)</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${filteredReservations.map(res => {
+                    const isMine = res.userId === currentUser.id;
+                    const canEdit = canModifyReservation(res);
+                    const typeObj = MEETING_TYPES.find(t => t.id === res.meetingType);
+
+                    return `
+                      <tr class="hover:bg-slate-50/80 transition ${isMine ? 'bg-teal-50/30' : ''}">
+                        <td class="p-3 font-extrabold text-slate-800 font-mono">${res.date}</td>
+                        <td class="p-3 font-bold text-teal-800">${escapeHtml(res.roomName.replace('衛生社福大樓', ''))}</td>
+                        <td class="p-3 font-mono font-bold text-slate-700">${res.startTime} - ${res.endTime}</td>
+                        <td class="p-3 font-bold text-slate-800 max-w-xs truncate">${escapeHtml(res.reason)}</td>
+                        <td class="p-3">
+                          ${typeObj ? `<span class="px-2 py-0.5 text-[10px] font-bold rounded-md border ${typeObj.color}">${typeObj.label}</span>` : '<span class="text-slate-400">一般</span>'}
+                        </td>
+                        <td class="p-3 text-slate-700">${escapeHtml(res.dept)} - ${escapeHtml(res.userName)}</td>
+                        <td class="p-3 text-center">
+                          ${res.equipment && res.equipment.length > 0 ? `<span class="bg-slate-100 text-slate-600 text-[10px] px-2 py-0.5 rounded-full font-semibold" title="${res.equipment.join(', ')}">${res.equipment.length} 項需求</span>` : '<span class="text-slate-300">-</span>'}
+                        </td>
+                        <td class="p-3 text-right space-x-1">
+                          <button onclick="openViewReservationModal('${res.id}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold transition">詳情</button>
+                          ${canEdit ? `
+                            <button onclick="openEditReservationModal('${res.id}')" class="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-lg font-bold transition">編輯</button>
+                            <button onclick="deleteReservation('${res.id}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg font-bold transition">刪除</button>
+                          ` : ''}
+                          <button onclick="downloadICS(reservations.find(r=>r.id==='${res.id}'))" class="p-1 text-teal-600 hover:bg-teal-50 rounded-lg" title="匯出日曆檔 (.ics)"><i data-lucide="calendar-plus" class="w-4 h-4"></i></button>
+                          <button onclick="copyMeetingInfo(reservations.find(r=>r.id==='${res.id}'))" class="p-1 text-blue-600 hover:bg-blue-50 rounded-lg" title="複製會議文字"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </div>
+      `;
+    };
+
+    // ==========================================
+    // 2D. 統計儀表板視圖 (Stats Dashboard Component)
+    // ==========================================
+    const renderStatsView = () => {
+      const totalCount = reservations.length;
+      
+      const roomCounts = rooms.map(r => ({
+        name: r.name.replace('衛生社福大樓', ''),
+        count: reservations.filter(res => res.roomId === r.id).length
+      }));
+
+      const deptMap = {};
+      reservations.forEach(r => {
+        deptMap[r.dept] = (deptMap[r.dept] || 0) + 1;
+      });
+      const deptCounts = Object.keys(deptMap).map(k => ({ dept: k, count: deptMap[k] }));
+
+      return `
+        <div class="space-y-6 animate-fade-in">
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <div class="flex items-center justify-between text-slate-500 mb-2">
+                <span class="text-xs font-bold">總預約場次</span>
+                <i data-lucide="calendar-check-2" class="w-5 h-5 text-teal-600"></i>
+              </div>
+              <div class="text-3xl font-black text-slate-800">${totalCount} <span class="text-xs text-slate-400 font-normal">場</span></div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <div class="flex items-center justify-between text-slate-500 mb-2">
+                <span class="text-xs font-bold">熱門會議室</span>
+                <i data-lucide="trending-up" class="w-5 h-5 text-blue-600"></i>
+              </div>
+              <div class="text-base font-extrabold text-slate-800 truncate">${roomCounts.sort((a,b)=>b.count-a.count)[0]?.name || '無'}</div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <div class="flex items-center justify-between text-slate-500 mb-2">
+                <span class="text-xs font-bold">最常預約科室</span>
+                <i data-lucide="building-2" class="w-5 h-5 text-purple-600"></i>
+              </div>
+              <div class="text-base font-extrabold text-slate-800 truncate">${deptCounts.sort((a,b)=>b.count-a.count)[0]?.dept || '無'}</div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <div class="flex items-center justify-between text-slate-500 mb-2">
+                <span class="text-xs font-bold">可用會議室總數</span>
+                <i data-lucide="door-open" class="w-5 h-5 text-emerald-600"></i>
+              </div>
+              <div class="text-3xl font-black text-slate-800">${rooms.length} <span class="text-xs text-slate-400 font-normal">間</span></div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <h4 class="font-black text-sm text-slate-800 flex items-center gap-2">
+                <i data-lucide="pie-chart" class="w-4 h-4 text-teal-600"></i> 各會議室預約使用率分佈
+              </h4>
+              <div class="space-y-3 text-xs">
+                ${roomCounts.map(item => {
+                  const percent = totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0;
+                  return `
+                    <div>
+                      <div class="flex justify-between font-bold text-slate-700 mb-1">
+                        <span>${item.name}</span>
+                        <span>${item.count} 場 (${percent}%)</span>
+                      </div>
+                      <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                        <div class="bg-teal-600 h-full rounded-full transition-all duration-500" style="width: ${percent}%;"></div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <h4 class="font-black text-sm text-slate-800 flex items-center gap-2">
+                <i data-lucide="bar-chart-2" class="w-4 h-4 text-blue-600"></i> 各科室預約使用排行
+              </h4>
+              <div class="space-y-3 text-xs">
+                ${deptCounts.map(item => {
+                  const percent = totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0;
+                  return `
+                    <div>
+                      <div class="flex justify-between font-bold text-slate-700 mb-1">
+                        <span>${item.dept}</span>
+                        <span>${item.count} 場 (${percent}%)</span>
+                      </div>
+                      <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                        <div class="bg-blue-600 h-full rounded-full transition-all duration-500" style="width: ${percent}%;"></div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    // ==========================================
+    // 3. 彈窗 Modal 控制與渲染 (Modal Components)
+    // ==========================================
+    const renderActiveModalHTML = () => {
+      if (!activeModal) return '';
+
+      // 3A. 點擊月曆日期所彈出的「單日預約狀況與 CRUD 主控面板」
+      if (activeModal === 'DAY_SCHEDULE') {
+        const dayRes = reservations.filter(r => r.date === selectedDateStr);
+        
+        const dateObj = new Date(selectedDateStr + 'T00:00:00');
+        const weekDayMap = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+        const formattedTitle = `${dateObj.getFullYear()} 年 ${dateObj.getMonth() + 1} 月 ${dateObj.getDate()} 日 (${weekDayMap[dateObj.getDay()]})`;
+        const isToday = selectedDateStr === formatDateStr(new Date());
+
+        return `
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+            <div class="bg-white rounded-3xl shadow-2xl max-w-5xl w-full h-[92vh] flex flex-col overflow-hidden border border-slate-100 animate-fade-in">
+              <!-- Top Header Bar -->
+              <div class="bg-slate-900 px-6 py-4 text-white flex flex-wrap items-center justify-between gap-3 shrink-0 border-b border-slate-800">
+                <div class="flex items-center gap-3">
+                  <div class="w-11 h-11 rounded-2xl bg-teal-600 flex flex-col items-center justify-center text-white font-black shadow-md">
+                    <span class="text-[9px] uppercase tracking-wider">${weekDayMap[dateObj.getDay()]}</span>
+                    <span class="text-lg leading-none">${dateObj.getDate()}</span>
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <h3 class="font-black text-lg text-white">${formattedTitle}</h3>
+                      ${isToday ? '<span class="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">今天</span>' : ''}
+                    </div>
+                    <p class="text-xs text-teal-300/90">單日時間軸與會議室佔用時段表 (Day Schedule View)</p>
+                  </div>
+                </div>
+
+                <!-- Date Switcher & Actions -->
+                <div class="flex items-center gap-2">
+                  <div class="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700 text-xs">
+                    <button onclick="changeSelectedDateByDelta(-1)" class="p-1 hover:bg-slate-700 rounded-lg text-slate-300 transition" title="前一天">
+                      <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="selectTodayInDayView()" class="px-2.5 py-1 text-slate-200 hover:text-white font-bold transition text-[11px]">
+                      今天
+                    </button>
+                    <button onclick="changeSelectedDateByDelta(1)" class="p-1 hover:bg-slate-700 rounded-lg text-slate-300 transition" title="後一天">
+                      <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+
+                  <button onclick="openNewReservationModal('${selectedDateStr}')" class="px-3.5 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-extrabold transition shadow-md flex items-center gap-1.5">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>新增預約</span>
+                  </button>
+                  <button onclick="closeModal()" aria-label="關閉視窗" class="p-2 text-slate-400 hover:text-white transition">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Occupancy Stats Summary Bar -->
+              <div class="bg-slate-50 px-6 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between text-xs gap-3 shrink-0">
+                <div class="flex flex-wrap items-center gap-3">
+                  <span class="font-bold text-slate-700 flex items-center gap-1.5">
+                    <i data-lucide="pie-chart" class="w-4 h-4 text-teal-600"></i>
+                    當日佔用概況：
+                  </span>
+                  ${rooms.map(rm => {
+                    const rmRes = dayRes.filter(r => r.roomId === rm.id);
+                    const totalMin = rmRes.reduce((acc, r) => acc + (parseTimeToMin(r.endTime) - parseTimeToMin(r.startTime)), 0);
+                    const hoursOccupied = (totalMin / 60).toFixed(1);
+                    return `
+                      <span class="px-2.5 py-1 rounded-xl bg-white border border-slate-200 font-semibold text-slate-700 flex items-center gap-1 shadow-2xs">
+                        <span class="w-2 h-2 rounded-full ${ROOM_COLOR_STYLES[rm.id]?.dot || 'bg-teal-500'}"></span>
+                        <span>${escapeHtml(rm.name)}: <b class="text-teal-700 font-mono">${hoursOccupied}</b> 小時 (${rmRes.length}場)</span>
+                      </span>
+                    `;
+                  }).join('')}
+                </div>
+
+                <div class="text-[11px] text-teal-700 font-bold bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200">
+                  💡 點擊空白時段區塊可直接預約該會議室與時間
+                </div>
+              </div>
+
+              <!-- Timeline Grid Area -->
+              <div class="flex-1 overflow-y-auto custom-scrollbar p-5 bg-slate-100/60">
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-w-[720px]">
+                  <!-- Table Column Headers (Rooms) -->
+                  <div class="grid grid-cols-12 bg-slate-900 text-white font-extrabold text-xs py-3 border-b border-slate-800 text-center sticky top-0 z-30 shadow-xs">
+                    <div class="col-span-2 text-slate-300 font-mono">時間軸 (Time)</div>
+                    ${rooms.map(rm => `
+                      <div class="col-span-5 text-left px-4 flex items-center gap-2 border-l border-slate-800">
+                        <span class="w-2.5 h-2.5 rounded-full ${ROOM_COLOR_STYLES[rm.id]?.dot || 'bg-teal-400'}"></span>
+                        <span class="text-sm font-black">${escapeHtml(rm.name)}</span>
+                        <span class="text-[10px] font-normal text-slate-400 ml-auto">(容納${rm.capacity}人)</span>
+                      </div>
+                    `).join('')}
+                  </div>
+
+                  <!-- Vertical Schedule Canvas -->
+                  <div class="relative min-h-[640px] bg-slate-50/30">
+                    <!-- Hourly Background Grid Lines -->
+                    ${[8, 9, 10, 11, 12, 13, 14, 15, 16, 17].map((hour) => `
+                      <div class="grid grid-cols-12 border-b border-slate-200/80 h-[64px] items-start group">
+                        <!-- Hour Mark -->
+                        <div class="col-span-2 px-3 py-1 text-slate-500 font-mono text-xs font-bold border-r border-slate-200 flex items-center justify-between h-full bg-slate-50/90">
+                          <span>${String(hour).padStart(2, '0')}:00</span>
+                          <span class="text-[9px] text-slate-300 font-normal">--</span>
+                        </div>
+                        
+                        <!-- Room Interactive Slot Columns -->
+                        ${rooms.map(rm => `
+                          <div onclick="openNewReservationModal('${selectedDateStr}', '${rm.id}', '${String(hour).padStart(2, '0')}:00', '${String(hour + 1).padStart(2, '0')}:00')"
+                            class="col-span-5 h-full border-r border-slate-200/60 hover:bg-teal-50/80 transition cursor-pointer p-1 flex items-center justify-center text-[10px] text-slate-400 hover:text-teal-700 font-bold group/slot"
+                            title="點擊在「${escapeHtml(rm.name)}」預約 ${String(hour).padStart(2, '0')}:00 ~ ${String(hour + 1).padStart(2, '0')}:00">
+                            <span class="opacity-0 group-hover/slot:opacity-100 transition bg-white px-2 py-1 rounded-lg border border-teal-300 shadow-2xs text-teal-800 flex items-center gap-1">
+                              <i data-lucide="plus" class="w-3 h-3"></i> 預約此時段
+                            </span>
+                          </div>
+                        `).join('')}
+                      </div>
+                    `).join('')}
+
+                    <!-- Absolute Positioned Booking Cards Overlay -->
+                    <div class="absolute inset-0 pointer-events-none grid grid-cols-12">
+                      <div class="col-span-2"></div> <!-- Time label offset -->
+
+                      ${rooms.map((rm) => {
+                        const roomReservations = dayRes.filter(r => r.roomId === rm.id);
+
+                        return `
+                          <div class="col-span-5 relative h-full pointer-events-none">
+                            ${roomReservations.map(res => {
+                              const sMin = parseTimeToMin(res.startTime);
+                              const eMin = parseTimeToMin(res.endTime);
+                              const durationMin = Math.max(30, eMin - sMin);
+
+                              // 08:00 is 480 min. Grid height is 640px for 10 hours (64px per hour)
+                              const topPx = ((sMin - 480) / 60) * 64;
+                              const heightPx = (durationMin / 60) * 64;
+
+                              const isMine = res.userId === currentUser.id;
+                              const canEdit = canModifyReservation(res);
+                              const typeObj = MEETING_TYPES.find(t => t.id === res.meetingType);
+
+                              return `
+                                <div onclick="openViewReservationModal('${res.id}')"
+                                  style="top: ${topPx}px; height: ${heightPx - 4}px;"
+                                  class="pointer-events-auto absolute left-1.5 right-1.5 rounded-2xl p-3 text-xs cursor-pointer transition-all duration-200 shadow-md hover:shadow-xl hover:scale-[1.01] z-20 flex flex-col justify-between overflow-hidden border ${
+                                    isMine
+                                      ? 'bg-gradient-to-r from-teal-700 to-teal-800 text-white border-teal-500 ring-2 ring-teal-300/60'
+                                      : 'bg-gradient-to-r from-slate-800 to-slate-900 text-white border-slate-700'
+                                  }">
+                                  <!-- Top Header inside Event Card -->
+                                  <div class="flex items-start justify-between gap-1">
+                                    <div class="space-y-1 min-w-0">
+                                      <div class="flex items-center gap-1.5 flex-wrap">
+                                        <span class="font-mono font-black text-[11px] px-2 py-0.5 rounded-md ${isMine ? 'bg-teal-900/80 text-amber-300 border border-teal-600' : 'bg-slate-700 text-teal-300 border border-slate-600'}">
+                                          ⏰ ${res.startTime} ~ ${res.endTime} (佔用 ${(durationMin/60).toFixed(1)} 小時)
+                                        </span>
+                                        ${typeObj ? `<span class="px-1.5 py-0.2 text-[9px] font-bold rounded ${typeObj.color}">${typeObj.label}</span>` : ''}
+                                      </div>
+                                      <h4 class="font-black text-sm tracking-wide text-white truncate leading-tight pt-0.5">
+                                        ${escapeHtml(res.reason)}
+                                      </h4>
+                                    </div>
+
+                                    <!-- Quick Buttons -->
+                                    <div class="flex items-center gap-1 shrink-0">
+                                      ${canEdit ? `
+                                        <button onclick="event.stopPropagation(); openEditReservationModal('${res.id}')" class="p-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition" title="編輯預約">
+                                          <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <button onclick="event.stopPropagation(); deleteReservation('${res.id}')" class="p-1 bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 rounded-lg transition" title="刪除預約">
+                                          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                      ` : ''}
+                                    </div>
+                                  </div>
+
+                                  <!-- Bottom Footer inside Event Card -->
+                                  <div class="flex items-center justify-between text-[11px] text-slate-300 pt-1 border-t border-white/10 mt-auto">
+                                    <span class="truncate">👤 ${escapeHtml(res.dept)} - ${escapeHtml(res.userName)} (分機:${escapeHtml(res.ext)})</span>
+                                    <span class="shrink-0 font-bold bg-white/10 px-1.5 py-0.5 rounded">👥 ${res.headcount}人</span>
+                                  </div>
+                                </div>
+                              `;
+                            }).join('')}
+                          </div>
+                        `;
+                      }).join('')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Modal Footer -->
+              <div class="bg-slate-100 px-6 py-3 border-t border-slate-200 flex items-center justify-between shrink-0">
+                <div class="text-xs text-slate-600 font-medium">
+                  目前檢視日期：<span class="font-bold text-slate-900 font-mono">${selectedDateStr}</span>
+                </div>
+                <button onclick="closeModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-xs transition">
+                  關閉視圖
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // 3B. 首次登入變更密碼 Modal
+      if (activeModal === 'MUST_CHANGE_PW') {
+        return `
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 animate-fade-in">
+              <div class="flex items-center gap-3 text-amber-600 mb-4">
+                <div class="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
+                  <i data-lucide="key-round" class="w-6 h-6 text-amber-600"></i>
+                </div>
+                <div>
+                  <h3 class="font-black text-base text-slate-800">首次登入密碼變更</h3>
+                  <p class="text-xs text-slate-500">系統要求變更預設專線密碼</p>
+                </div>
+              </div>
+              <p class="text-xs text-slate-600 mb-4 bg-amber-50/80 p-3.5 rounded-2xl border border-amber-200/60 leading-relaxed">
+                您的帳號目前使用科室公務專線作為預設密碼。為維持資訊安全，請立即修改為自訂密碼。
+              </p>
+              <form onsubmit="handleSaveMustChangePw(event)" class="space-y-3 text-xs">
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">輸入新密碼 (至少4字元)</label>
+                  <input type="password" id="newPwInput" autocomplete="new-password" required placeholder="請輸入新密碼" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500" />
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">再次確認新密碼</label>
+                  <input type="password" id="confirmPwInput" autocomplete="new-password" required placeholder="再次輸入新密碼" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500" />
+                </div>
+                <div class="pt-3">
+                  <button type="submit" class="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl transition shadow-md">
+                    確認變更密碼並儲存
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      // 3C. 新增／編輯預約 Modal (CRUD - Create / Update)
+      if (activeModal === 'RESERVATION_FORM' && editingReservationData) {
+        return `
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div class="bg-white rounded-3xl shadow-2xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-100 animate-fade-in">
+              <div class="bg-gradient-to-r from-teal-700 to-cyan-700 px-6 py-4 text-white flex items-center justify-between shrink-0">
+                <h3 class="font-black text-base flex items-center gap-2">
+                  <i data-lucide="calendar-plus" class="w-5 h-5"></i>
+                  ${editingReservationData.id ? '修改會議室預約單 (Update)' : '填寫會議室預約單 (Create)'}
+                </h3>
+                <button onclick="closeModal()" aria-label="關閉視窗" class="text-white/80 hover:text-white transition">
+                  <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+              </div>
+
+              <form onsubmit="handleSaveReservation(event)" class="p-6 overflow-y-auto space-y-4 text-xs custom-scrollbar flex-1">
+                ${conflictSuggestion ? `
+                  <div class="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-rose-900 space-y-2">
+                    <div class="font-bold flex items-center gap-1.5">
+                      <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i> 時段衝突！此會議室在該時段已有預約。
+                    </div>
+                    <div class="text-[11px] text-rose-800">
+                      衝突項目：【${escapeHtml(conflictSuggestion.dept)} - ${escapeHtml(conflictSuggestion.userName)}】${conflictSuggestion.startTime}~${conflictSuggestion.endTime}
+                    </div>
+                  </div>
+                ` : ''}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block font-bold text-slate-700 mb-1">會議室名稱</label>
+                    <select id="resRoomId" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold text-slate-800">
+                      ${rooms.map(rm => `<option value="${rm.id}" ${editingReservationData.roomId === rm.id ? 'selected' : ''}>${rm.name} (容納 ${rm.capacity}人)</option>`).join('')}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="block font-bold text-slate-700 mb-1">預約日期</label>
+                    <input type="date" id="resDate" value="${editingReservationData.date}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold font-mono" />
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block font-bold text-slate-700 mb-1">開始時間</label>
+                    <input type="time" id="resStartTime" step="900" value="${editingReservationData.startTime}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold font-mono" />
+                  </div>
+                  <div>
+                    <label class="block font-bold text-slate-700 mb-1">結束時間</label>
+                    <input type="time" id="resEndTime" step="900" value="${editingReservationData.endTime}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold font-mono" />
+                  </div>
+                </div>
+
+                <!-- [UI/UX 優化] 常用快捷時段一鍵帶入 -->
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1 text-[11px]">快捷時段選擇 (一鍵帶入)</label>
+                  <div class="flex flex-wrap gap-1.5">
+                    ${TIME_PRESETS.map(p => `
+                      <button type="button" onclick="applyTimePreset('${p.start}', '${p.end}')" class="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-2xs active:scale-95">
+                        <i data-lucide="clock" class="w-3 h-3 text-teal-600"></i>
+                        <span>${p.label} (${p.start}~${p.end})</span>
+                      </button>
+                    `).join('')}
+                  </div>
+                </div>
+
+                
+
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">預約事由 / 會議主題</label>
+                  <input type="text" id="resReason" placeholder="請填寫會議名稱或事由" value="${escapeHtml(editingReservationData.reason)}" required class="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold" />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block font-bold text-slate-700 mb-1">會議類型</label>
+                    <select id="resMeetingType" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold">
+                      ${MEETING_TYPES.map(t => `<option value="${t.id}" ${editingReservationData.meetingType === t.id ? 'selected' : ''}>${t.label}</option>`).join('')}
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block font-bold text-slate-700 mb-1">預估出席人數</label>
+                    <input type="number" id="resHeadcount" min="1" max="300" value="${editingReservationData.headcount}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold" />
+                  </div>
+                </div>
+
+                <!-- Equipment Request Checklist -->
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1.5">特殊設備與服務需求</label>
+                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                    ${equipmentOptions.map(eq => {
+                      const checked = editingReservationData.equipment && editingReservationData.equipment.includes(eq);
+                      return `
+                        <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer">
+                          <input type="checkbox" name="resEquipment" value="${eq}" ${checked ? 'checked' : ''} class="rounded text-teal-600 focus:ring-teal-500" />
+                          <span>${eq}</span>
+                        </label>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">備註說明 (選填)</label>
+                  <textarea id="resNotes" rows="2" placeholder="例：需準備發言名牌、開關冷氣等額外協助..." class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500">${escapeHtml(editingReservationData.notes || '')}</textarea>
+                </div>
+
+                <!-- Registrant Info Footer -->
+                <div class="p-3 bg-slate-100/70 border border-slate-200 rounded-2xl space-y-1 text-slate-600 text-[11px]">
+                  <div class="font-bold text-slate-800 mb-1">登記人員資料 (系統自動帶入)</div>
+                  <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <div>登記同仁：<span class="font-bold text-slate-800">${escapeHtml(editingReservationData.userName)}</span> (${escapeHtml(editingReservationData.userId)})</div>
+                    <div>所屬科室：<span class="font-bold text-slate-800">${escapeHtml(editingReservationData.dept)}</span> (分機: ${escapeHtml(editingReservationData.ext)})</div>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+                  <button type="button" onclick="closeModal()" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition">取消</button>
+                  <button type="submit" class="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-md transition flex items-center gap-1.5">
+                    <i data-lucide="check" class="w-4 h-4"></i>
+                    <span>確認儲存預約</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      // 3D. 檢視預約細節 Modal (CRUD - Read)
+      if (activeModal === 'VIEW_RES' && viewingReservationData) {
+        const canEdit = canModifyReservation(viewingReservationData);
+        const typeObj = MEETING_TYPES.find(t => t.id === viewingReservationData.meetingType);
+
+        return `
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 animate-fade-in">
+              <div class="bg-slate-900 px-6 py-4 text-white flex items-center justify-between">
+                <h3 class="font-black text-sm flex items-center gap-2">
+                  <i data-lucide="file-text" class="w-4 h-4 text-teal-400"></i>
+                  預約詳細內容 (Read)
+                </h3>
+                <button onclick="closeModal()" class="text-white/80 hover:text-white">
+                  <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+              </div>
+
+              <div class="p-6 space-y-4 text-xs text-slate-700">
+                <div class="bg-teal-50/80 border border-teal-200/80 p-4 rounded-2xl space-y-1">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[10px] text-teal-800 font-bold">會議主題</span>
+                    ${typeObj ? `<span class="px-2 py-0.5 text-[10px] font-bold rounded-md border ${typeObj.color}">${typeObj.label}</span>` : ''}
+                  </div>
+                  <div class="text-base font-black text-teal-950">${escapeHtml(viewingReservationData.reason)}</div>
+                </div>
+
+                <div class="space-y-2.5 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="map-pin" class="w-4 h-4 text-slate-400"></i>
+                    <span class="font-bold text-slate-500">會議室：</span>
+                    <span class="font-extrabold text-slate-800">${escapeHtml(viewingReservationData.roomName)}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="calendar" class="w-4 h-4 text-slate-400"></i>
+                    <span class="font-bold text-slate-500">預約日期：</span>
+                    <span class="font-extrabold text-slate-800">${viewingReservationData.date}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="clock" class="w-4 h-4 text-slate-400"></i>
+                    <span class="font-bold text-slate-500">預約時間：</span>
+                    <span class="font-black text-teal-700 font-mono">${viewingReservationData.startTime} ~ ${viewingReservationData.endTime}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+                    <span class="font-bold text-slate-500">預估人數：</span>
+                    <span class="font-extrabold text-slate-800">${viewingReservationData.headcount} 人</span>
+                  </div>
+                  ${viewingReservationData.equipment && viewingReservationData.equipment.length > 0 ? `
+                    <div class="flex items-start gap-2 pt-1 border-t border-slate-200">
+                      <i data-lucide="wrench" class="w-4 h-4 text-slate-400 shrink-0 mt-0.5"></i>
+                      <span class="font-bold text-slate-500 shrink-0">設備需求：</span>
+                      <div class="flex flex-wrap gap-1">
+                        ${viewingReservationData.equipment.map(eq => `<span class="bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold">${eq}</span>`).join('')}
+                      </div>
+                    </div>
+                  ` : ''}
+                  ${viewingReservationData.notes ? `
+                    <div class="flex items-start gap-2 pt-1 border-t border-slate-200">
+                      <i data-lucide="file-spread-sheet" class="w-4 h-4 text-slate-400 shrink-0 mt-0.5"></i>
+                      <span class="font-bold text-slate-500 shrink-0">備註事項：</span>
+                      <span class="text-slate-700 leading-relaxed">${escapeHtml(viewingReservationData.notes)}</span>
+                    </div>
+                  ` : ''}
+                </div>
+
+                <div class="bg-slate-100/70 p-3.5 rounded-2xl border border-slate-200 space-y-1 text-slate-600">
+                  <div class="font-bold text-slate-800 mb-1">登記人員資訊</div>
+                  <div>登記姓名：<span class="font-bold text-slate-800">${escapeHtml(viewingReservationData.userName)}</span> (工號: ${escapeHtml(viewingReservationData.userId)})</div>
+                  <div>所屬科室：${escapeHtml(viewingReservationData.dept)} (分機: ${escapeHtml(viewingReservationData.ext)})</div>
+                  <div class="text-[10px] text-slate-400 pt-1">登記時間：${viewingReservationData.createdAt}</div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                  <button onclick="downloadICS(viewingReservationData)" class="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition flex items-center justify-center gap-1.5 border border-slate-200">
+                    <i data-lucide="calendar-plus" class="w-4 h-4 text-teal-600"></i>
+                    <span>匯出行事曆 (.ics)</span>
+                  </button>
+                  <button onclick="copyMeetingInfo(viewingReservationData)" class="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition flex items-center justify-center gap-1.5 border border-slate-200">
+                    <i data-lucide="copy" class="w-4 h-4 text-blue-600"></i>
+                    <span>複製會議通知</span>
+                  </button>
+                </div>
+
+                <div class="pt-2 flex items-center justify-between gap-2 border-t border-slate-100">
+                  ${canEdit ? `
+                    <button onclick="openEditReservationModal('${viewingReservationData.id}')" class="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md">
+                      <i data-lucide="edit-3" class="w-4 h-4"></i> 修改這筆預約 (Update)
+                    </button>
+                    <button onclick="deleteReservation('${viewingReservationData.id}')" class="py-2.5 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold transition flex items-center gap-1">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i> 刪除 (Delete)
+                    </button>
+                  ` : `
+                    <div class="w-full text-center text-slate-400 bg-slate-100 py-2 rounded-xl text-[11px] border border-slate-200 flex items-center justify-center gap-1 font-medium">
+                      <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+                      僅限「管理者」或「登記同仁 (${escapeHtml(viewingReservationData.userName)})」可修改/刪除
+                    </div>
+                  `}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // 3E. 個人資料修改 Modal
+      if (activeModal === 'PROFILE') {
+        return `
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 animate-fade-in">
+              <div class="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+                <h3 class="font-black text-base text-slate-800 flex items-center gap-2">
+                  <i data-lucide="user-cog" class="w-5 h-5 text-teal-600"></i>
+                  修改個人帳號資料
+                </h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600">
+                  <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+              </div>
+
+              <form onsubmit="handleSaveProfile(event)" class="space-y-3 text-xs">
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">員工工號 (ID)</label>
+                  <input type="text" value="${escapeHtml(currentUser.id)}" disabled class="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-mono font-bold" />
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">姓名</label>
+                  <input type="text" id="profileName" value="${escapeHtml(currentUser.name)}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold" />
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">所屬科室</label>
+                  <select id="profileDept" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold">
+                    ${departments.map(d => `<option value="${d.name}" ${currentUser.dept === d.name ? 'selected' : ''}>${d.name} (專線: ${d.phone})</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">分機號碼</label>
+                  <input type="text" id="profileExt" value="${escapeHtml(currentUser.ext)}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold" />
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">修改密碼 <span class="text-xs font-normal text-slate-400">(如不修改請留空)</span></label>
+                  <input type="password" id="profilePassword" autocomplete="new-password" placeholder="輸入新密碼以進行修改" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold" />
+                </div>
+                <div class="pt-3 flex justify-end gap-2">
+                  <button type="button" onclick="closeModal()" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-600 font-bold hover:bg-slate-100">取消</button>
+                  <button type="submit" class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-md transition">儲存修改</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      // 3F. 管理者控制台 Modal
+      if (activeModal === 'ADMIN' && (currentUser.role === 'admin' || currentUser.role === 'superadmin')) {
+        const editingUserObj = adminEditingUserId ? users.find(u => u.id === adminEditingUserId) : null;
+        const editingRoomObj = adminEditingRoomId ? rooms.find(r => r.id === adminEditingRoomId) : null;
+        const editingDeptObj = adminEditingDeptName ? departments.find(d => d.name === adminEditingDeptName) : null;
+
+        return `
+          <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div class="bg-white rounded-3xl shadow-2xl max-w-5xl w-full h-[88vh] flex flex-col overflow-hidden border border-slate-100 animate-fade-in">
+              <div class="bg-purple-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-purple-800 border border-purple-700 flex items-center justify-center">
+                    <i data-lucide="shield-check" class="w-6 h-6 text-purple-300"></i>
+                  </div>
+                  <div>
+                    <h3 class="font-black text-base">最高管理者主控台</h3>
+                    <p class="text-xs text-purple-200">同仁帳號、會議室清單、科室專線與全預約紀錄 CRUD 增刪改查</p>
+                  </div>
+                </div>
+                <button onclick="closeModal()" class="text-white/80 hover:text-white">
+                  <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+              </div>
+
+              <div class="flex bg-slate-100 border-b border-slate-200 text-xs font-bold px-6 overflow-x-auto shrink-0">
+                <button onclick="switchAdminTab('USERS')" class="py-3 px-4 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap ${adminTab === 'USERS' ? 'border-purple-600 text-purple-900 bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}">
+                  <i data-lucide="users" class="w-4 h-4"></i> 帳號管理 (${users.length})
+                </button>
+                <button onclick="switchAdminTab('ROOMS')" class="py-3 px-4 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap ${adminTab === 'ROOMS' ? 'border-purple-600 text-purple-900 bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}">
+                  <i data-lucide="map-pin" class="w-4 h-4"></i> 會議室管理 (${rooms.length})
+                </button>
+                <button onclick="switchAdminTab('DEPARTMENTS')" class="py-3 px-4 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap ${adminTab === 'DEPARTMENTS' ? 'border-purple-600 text-purple-900 bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}">
+                  <i data-lucide="building" class="w-4 h-4"></i> 科室與專線 (${departments.length})
+                </button>
+                <button onclick="switchAdminTab('EQUIPMENT')" class="py-3 px-4 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap ${adminTab === 'EQUIPMENT' ? 'border-purple-600 text-purple-900 bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}">
+                  <i data-lucide="wrench" class="w-4 h-4"></i> 設備與服務需求 (${equipmentOptions.length})
+                </button>
+                <button onclick="switchAdminTab('RESERVATIONS')" class="py-3 px-4 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap ${adminTab === 'RESERVATIONS' ? 'border-purple-600 text-purple-900 bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}">
+                  <i data-lucide="calendar" class="w-4 h-4"></i> 所有預約總覽 (${reservations.length})
+                </button>
+              </div>
+
+              <div class="flex-1 overflow-y-auto p-6 bg-slate-50 text-xs custom-scrollbar">
+                ${adminTab === 'USERS' ? `
+                  <div class="space-y-6">
+                    <form onsubmit="handleAdminSaveUser(event)" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                      <div class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                        <i data-lucide="user-plus" class="w-4 h-4 text-purple-600"></i>
+                        ${editingUserObj ? `修改帳號 (工號: ${editingUserObj.id})` : '新增同仁帳號'}
+                      </div>
+
+                      <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
+                        <div>
+                          <label class="block font-bold text-slate-600 mb-1">工號 (帳號ID)</label>
+                          <input type="text" id="adminUserId" placeholder="例: 71658" value="${editingUserObj ? editingUserObj.id : ''}" ${editingUserObj ? 'disabled' : ''} required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold disabled:bg-slate-100" />
+                        </div>
+                        <div>
+                          <label class="block font-bold text-slate-600 mb-1">同仁姓名</label>
+                          <input type="text" id="adminUserName" placeholder="姓名" value="${editingUserObj ? escapeHtml(editingUserObj.name) : ''}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold" />
+                        </div>
+                        <div>
+                          <label class="block font-bold text-slate-600 mb-1">所屬科室</label>
+                          <select id="adminUserDept" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold">
+                            ${departments.map(d => `<option value="${d.name}" ${editingUserObj && editingUserObj.dept === d.name ? 'selected' : ''}>${d.name}</option>`).join('')}
+                          </select>
+                        </div>
+                        <div>
+                          <label class="block font-bold text-slate-600 mb-1">分機號碼</label>
+                          <input type="text" id="adminUserExt" placeholder="分機" value="${editingUserObj ? escapeHtml(editingUserObj.ext) : ''}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold" />
+                        </div>
+                        <div>
+                          <label class="block font-bold text-slate-600 mb-1">帳號權限</label>
+                          <select id="adminUserRole" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold">
+                            <option value="staff" ${editingUserObj && editingUserObj.role === 'staff' ? 'selected' : ''}>一般帳號</option>
+                            <option value="admin" ${editingUserObj && editingUserObj.role === 'admin' ? 'selected' : ''}>管理者</option>
+                            ${currentUser.role === 'superadmin' ? `<option value="superadmin" ${editingUserObj && editingUserObj.role === 'superadmin' ? 'selected' : ''}>超級管理員</option>` : ''}
+                          </select>
+                        </div>
+                        <div>
+                          <label class="block font-bold text-slate-600 mb-1" title="原密碼基於資訊安全無法檢視">
+                            ${editingUserObj ? '🔑 重置新密碼' : '設定初始密碼'}
+                          </label>
+                          <input type="password" id="adminUserPassword" autocomplete="new-password" placeholder="${editingUserObj ? '•••••••• (原密碼隱藏)' : '留空為科室專線'}" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold focus:ring-2 focus:ring-purple-500" />
+                        </div>
+                      </div>
+
+                      <div class="flex justify-end gap-2 pt-1">
+                        ${editingUserObj ? `
+                          <button type="button" onclick="cancelAdminUserEdit()" class="px-3.5 py-1.5 border border-slate-300 rounded-xl font-bold text-slate-600">取消編輯</button>
+                        ` : ''}
+                        <button type="submit" class="px-4 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl shadow-sm">
+                          ${editingUserObj ? '更新帳號資料' : '確定新增帳號'}
+                        </button>
+                      </div>
+                    </form>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+                      <table class="w-full text-left border-collapse">
+                        <thead>
+                          <tr class="bg-slate-100 border-b border-slate-200 font-bold text-slate-600">
+                            <th class="p-3">工號 (ID)</th>
+                            <th class="p-3">姓名</th>
+                            <th class="p-3">科室</th>
+                            <th class="p-3">分機</th>
+                            <th class="p-3">身分</th>
+                            <th class="p-3">密碼狀態</th>
+                            <th class="p-3 text-right">操作管理</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                          ${users.map(u => {
+                            const isTargetSuper = u.role === 'superadmin' || u.id === '99999';
+                            const isCallerSuper = currentUser.role === 'superadmin';
+                            const isProtected = isTargetSuper && !isCallerSuper;
+
+                            let roleBadge = '<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px]">一般同仁</span>';
+                            if (isTargetSuper) {
+                              roleBadge = '<span class="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-[10px] inline-flex items-center gap-0.5"><i data-lucide="shield-check" class="w-3 h-3 text-amber-600"></i> 超級管理員</span>';
+                            } else if (u.role === 'admin') {
+                              roleBadge = '<span class="bg-purple-100 text-purple-800 font-extrabold px-2 py-0.5 rounded text-[10px]">管理者</span>';
+                            }
+
+                            return `
+                              <tr class="hover:bg-slate-50">
+                                <td class="p-3 font-mono font-bold">${u.id}</td>
+                                <td class="p-3 font-bold text-slate-800">${escapeHtml(u.name)}</td>
+                                <td class="p-3">${escapeHtml(u.dept)}</td>
+                                <td class="p-3 font-mono">${escapeHtml(u.ext)}</td>
+                                <td class="p-3">${roleBadge}</td>
+                                <td class="p-3">
+                                  <span class="text-slate-400 font-mono text-[11px] bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200" title="原密碼已受加密保護，無法直接點閱">•••••••• (受保護)</span>
+                                </td>
+                                <td class="p-3 text-right space-x-1">
+                                  ${isProtected ? `
+                                    <span class="text-slate-400 font-bold text-[11px] bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 inline-flex items-center gap-1" title="超級管理員帳號，一般管理者無法更動">
+                                      <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-600"></i> 系統保護 (無法更動)
+                                    </span>
+                                  ` : `
+                                    <button onclick="startAdminUserEdit('${u.id}')" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="修改資料"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                    <button onclick="openAdminResetPasswordPrompt('${u.id}')" class="px-2.5 py-1 text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg font-bold transition inline-flex items-center gap-1" title="管理者重置忘記之密碼"><i data-lucide="key" class="w-3.5 h-3.5"></i> 重置密碼</button>
+                                    ${isTargetSuper ? '' : `<button onclick="deleteAdminUser('${u.id}')" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg" title="刪除帳號"><i data-lucide="trash-2" class="w-4 h-4"></i></button>`}
+                                  `}
+                                </td>
+                              </tr>
+                            `;
+                          }).join('')}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ` : adminTab === 'ROOMS' ? `
+                  <div class="space-y-6">
+                    <form onsubmit="handleAdminSaveRoom(event)" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                      <div class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-purple-600"></i>
+                        ${editingRoomObj ? `修改會議室資料 (${editingRoomObj.id})` : '新增會議室'}
+                      </div>
+
+                      <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div>
+                          <label class="block font-bold text-slate-600 mb-1">會議室代號 (ID)</label>
+                          <input type="text" id="adminRoomId" placeholder="例: R6" value="${editingRoomObj ? editingRoomObj.id : ''}" ${editingRoomObj ? 'disabled' : ''} required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold disabled:bg-slate-100" />
+                        </div>
+                        <div class="sm:col-span-2">
+                          <label class="block font-bold text-slate-600 mb-1">會議室全名</label>
+                          <input type="text" id="adminRoomName" placeholder="例: 11樓第一會議室" value="${editingRoomObj ? escapeHtml(editingRoomObj.name) : ''}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold" />
+                        </div>
+                        <div>
+                          <label class="block font-bold text-slate-600 mb-1">容納人數</label>
+                          <input type="number" id="adminRoomCapacity" min="1" max="500" value="${editingRoomObj ? editingRoomObj.capacity : ''}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold" />
+                        </div>
+                      </div>
+
+                      <div class="flex justify-end gap-2 pt-1">
+                        ${editingRoomObj ? `
+                          <button type="button" onclick="cancelAdminRoomEdit()" class="px-3.5 py-1.5 border border-slate-300 rounded-xl font-bold text-slate-600">取消編輯</button>
+                        ` : ''}
+                        <button type="submit" class="px-4 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl shadow-sm">
+                          ${editingRoomObj ? '更新會議室' : '新增會議室'}
+                        </button>
+                      </div>
+                    </form>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+                      <table class="w-full text-left border-collapse">
+                        <thead>
+                          <tr class="bg-slate-100 border-b border-slate-200 font-bold text-slate-600">
+                            <th class="p-3">代號</th>
+                            <th class="p-3">會議室全名</th>
+                            <th class="p-3">容納人數</th>
+                            <th class="p-3 text-right">操作管理</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                          ${rooms.map(rm => `
+                            <tr class="hover:bg-slate-50">
+                              <td class="p-3 font-mono font-bold">${rm.id}</td>
+                              <td class="p-3 font-bold text-slate-800">${escapeHtml(rm.name)}</td>
+                              <td class="p-3 font-bold text-slate-700">${rm.capacity} 人</td>
+                              <td class="p-3 text-right space-x-1">
+                                <button onclick="startAdminRoomEdit('${rm.id}')" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="修改"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                <button onclick="deleteAdminRoom('${rm.id}')" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg" title="刪除"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                              </td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ` : adminTab === 'DEPARTMENTS' ? `
+                  <div class="space-y-6">
+                    <form onsubmit="handleAdminSaveDept(event)" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                      <div class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                        <i data-lucide="building" class="w-4 h-4 text-purple-600"></i>
+                        ${editingDeptObj ? `修改科室資料 (${editingDeptObj.name})` : '新增局內科室/室'}
+                      </div>
+
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label class="block font-bold text-slate-600 mb-1">科室名稱</label>
+                          <input type="text" id="adminDeptName" placeholder="例: 心理健康科" value="${editingDeptObj ? escapeHtml(editingDeptObj.name) : ''}" ${editingDeptObj ? 'disabled' : ''} required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold disabled:bg-slate-100" />
+                        </div>
+                        <div>
+                          <label class="block font-bold text-slate-600 mb-1">科室公務專線 (兼預設密碼)</label>
+                          <input type="text" id="adminDeptPhone" placeholder="例: 035355180" value="${editingDeptObj ? escapeHtml(editingDeptObj.phone) : ''}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold" />
+                        </div>
+                      </div>
+
+                      <div class="flex justify-end gap-2 pt-1">
+                        ${editingDeptObj ? `
+                          <button type="button" onclick="cancelAdminDeptEdit()" class="px-3.5 py-1.5 border border-slate-300 rounded-xl font-bold text-slate-600">取消編輯</button>
+                        ` : ''}
+                        <button type="submit" class="px-4 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl shadow-sm">
+                          ${editingDeptObj ? '更新科室專線' : '新增科室'}
+                        </button>
+                      </div>
+                    </form>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+                      <table class="w-full text-left border-collapse">
+                        <thead>
+                          <tr class="bg-slate-100 border-b border-slate-200 font-bold text-slate-600">
+                            <th class="p-3">科室名稱</th>
+                            <th class="p-3">公務專線電話 (預設密碼)</th>
+                            <th class="p-3 text-right">操作管理</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                          ${departments.map(d => `
+                            <tr class="hover:bg-slate-50">
+                              <td class="p-3 font-bold text-slate-800">${escapeHtml(d.name)}</td>
+                              <td class="p-3 font-mono font-bold text-slate-700">${escapeHtml(d.phone)}</td>
+                              <td class="p-3 text-right space-x-1">
+                                <button onclick="startAdminDeptEdit('${d.name}')" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                <button onclick="deleteAdminDept('${d.name}')" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                              </td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ` : adminTab === 'EQUIPMENT' ? `
+                  <div class="space-y-6">
+                    <form onsubmit="handleAdminSaveEquip(event)" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                      <div class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                        <i data-lucide="wrench" class="w-4 h-4 text-purple-600"></i>
+                        ${adminEditingEquipName ? `修改設備/服務名稱 (${escapeHtml(adminEditingEquipName)})` : '新增特殊設備與服務需求項目'}
+                      </div>
+
+                      <div class="flex items-center gap-3">
+                        <div class="flex-1">
+                          <label class="block font-bold text-slate-600 mb-1">設備 / 服務需求名稱</label>
+                          <input type="text" id="adminEquipName" placeholder="例: 線上直播設備、簡報翻頁器、同步口譯耳機..." value="${adminEditingEquipName ? escapeHtml(adminEditingEquipName) : ''}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold" />
+                        </div>
+                      </div>
+
+                      <div class="flex justify-end gap-2 pt-1">
+                        ${adminEditingEquipName ? `
+                          <button type="button" onclick="cancelAdminEquipEdit()" class="px-3.5 py-1.5 border border-slate-300 rounded-xl font-bold text-slate-600">取消編輯</button>
+                        ` : ''}
+                        <button type="submit" class="px-4 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl shadow-sm">
+                          ${adminEditingEquipName ? '更新設備名稱' : '確定新增設備項目'}
+                        </button>
+                      </div>
+                    </form>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+                      <table class="w-full text-left border-collapse">
+                        <thead>
+                          <tr class="bg-slate-100 border-b border-slate-200 font-bold text-slate-600">
+                            <th class="p-3">設備 / 服務需求項目名稱</th>
+                            <th class="p-3">目前使用場次</th>
+                            <th class="p-3 text-right">操作管理 (CRUD)</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                          ${equipmentOptions.map(eq => {
+                            const usageCount = reservations.filter(r => r.equipment && r.equipment.includes(eq)).length;
+                            return `
+                              <tr class="hover:bg-slate-50">
+                                <td class="p-3 font-bold text-slate-800 flex items-center gap-2">
+                                  <i data-lucide="check-square" class="w-4 h-4 text-teal-600"></i>
+                                  <span>${escapeHtml(eq)}</span>
+                                </td>
+                                <td class="p-3">
+                                  <span class="bg-slate-100 text-slate-700 font-mono font-bold px-2 py-0.5 rounded-md text-[11px]">${usageCount} 場預約選用</span>
+                                </td>
+                                <td class="p-3 text-right space-x-1">
+                                  <button onclick="startAdminEquipEdit('${escapeHtml(eq)}')" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="編輯項目"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                  <button onclick="deleteAdminEquip('${escapeHtml(eq)}')" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg" title="刪除項目"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                </td>
+                              </tr>
+                            `;
+                          }).join('')}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ` : `
+                  <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+                    <table class="w-full text-left border-collapse">
+                      <thead>
+                        <tr class="bg-slate-100 border-b border-slate-200 font-bold text-slate-600">
+                          <th class="p-3">預約日期</th>
+                          <th class="p-3">會議室</th>
+                          <th class="p-3">時間</th>
+                          <th class="p-3">會議事由</th>
+                          <th class="p-3">登記人員</th>
+                          <th class="p-3 text-right">管理者操作</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-slate-100">
+                        ${reservations.map(res => `
+                          <tr class="hover:bg-slate-50">
+                            <td class="p-3 font-bold">${res.date}</td>
+                            <td class="p-3 font-bold text-teal-800">${escapeHtml(res.roomName.replace('衛生社福大樓', ''))}</td>
+                            <td class="p-3 font-mono font-bold">${res.startTime} - ${res.endTime}</td>
+                            <td class="p-3 font-bold text-slate-800">${escapeHtml(res.reason)}</td>
+                            <td class="p-3 text-slate-600">${escapeHtml(res.dept)} - ${escapeHtml(res.userName)} (${escapeHtml(res.userId)})</td>
+                            <td class="p-3 text-right space-x-1">
+                              <button onclick="adminDeleteReservation('${res.id}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg border border-rose-200 font-bold transition">強制刪除/取消</button>
+                            </td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+                `}
+              </div>
+
+              <div class="bg-slate-100 px-6 py-3 border-t border-slate-200 flex items-center justify-between shrink-0">
+                <button onclick="resetSystemDataToDefault()" class="px-3.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl font-bold transition text-xs flex items-center gap-1.5">
+                  <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                  <span>重置所有系統資料為預設範例</span>
+                </button>
+
+                <button onclick="closeModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-xs transition">關閉管理介面</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      return '';
+    };
+
+    // ==========================================
+    // 4. 事件處理器 (Event Handlers & CRUD Controller)
+    // ==========================================
+    window.handleLogin = async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('loginId').value.trim();
+      const pw = document.getElementById('loginPassword').value.trim();
+
+      const formData = new FormData(e.target);
+      const turnstileToken = formData.get('cf-turnstile-response') || document.querySelector('[name="cf-turnstile-response"]')?.value || '';
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, password: pw, turnstileToken })
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          setTimeout(() => window.turnstile?.reset(), 0);
+          showToast(data.message || '登入失敗，請確認工號與密碼是否正確！', 'error');
+          return;
+        }
+
+        authToken = data.token || '';
+        currentUser = data.user;
+        try {
+          sessionStorage.setItem('hc_auth_token', authToken);
+          sessionStorage.setItem('hc_current_user', JSON.stringify(currentUser));
+        } catch(e){}
+
+        showToast(`歡迎登入！ ${currentUser.dept} - ${currentUser.name} (${currentUser.id})`);
+
+        if (currentUser.mustChangePassword) {
+          activeModal = 'MUST_CHANGE_PW';
+        }
+
+        render();
+      } catch (err) {
+        showToast('連線失敗，請檢查網路狀態！', 'error');
+      }
+    };
+
+    window.handleLogout = () => {
+      currentUser = null;
+      authToken = '';
+      if (_pollingTimerId) {
+        clearInterval(_pollingTimerId);
+        _pollingTimerId = null;
+      }
+      try {
+        sessionStorage.removeItem('hc_auth_token');
+        sessionStorage.removeItem('hc_current_user');
+      } catch(e){}
+      activeModal = null;
+      showToast('已成功安全登出系統！');
+      render();
+    };
+
+    window.switchView = (view) => {
+      activeView = view;
+      render();
+    };
+
+    window.changeMonth = (delta) => {
+      currentDate.setMonth(currentDate.getMonth() + delta);
+      render();
+    };
+
+    window.goToday = () => {
+      currentDate = new Date();
+      selectedDateStr = formatDateStr(new Date());
+      render();
+    };
+
+    window.updateFilters = () => {
+      selectedRoomFilter = document.getElementById('roomFilter').value;
+      selectedDeptFilter = document.getElementById('deptFilter').value;
+      render();
+    };
+
+    // [記憶體與 UI 優化] 局部檢視區域更新 Helper (僅更新視圖內容，保護 Header / Search Input Focus)
+    const renderActiveViewOnly = () => {
+      const container = document.getElementById('view-content-area');
+      if (!container || !currentUser) {
+        render();
+        return;
+      }
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const days = getCalendarDays(year, month);
+
+      const filteredReservations = reservations.filter((r) => {
+        if (filterMyReservationsOnly && r.userId !== currentUser.id) return false;
+        if (selectedRoomFilter !== 'ALL' && r.roomId !== selectedRoomFilter) return false;
+        if (selectedDeptFilter !== 'ALL' && r.dept !== selectedDeptFilter) return false;
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          if (!r._searchKey) {
+            r._searchKey = `${r.reason || ''} ${r.userName || ''} ${r.dept || ''} ${r.roomName || ''} ${r.userId || ''} ${r.notes || ''}`.toLowerCase();
+          }
+          return r._searchKey.includes(q);
+        }
+        return true;
+      });
+
+      let html = '';
+      if (activeView === 'MONTH') html = renderMonthView(days, filteredReservations);
+      else if (activeView === 'TIMELINE') html = renderTimelineView(filteredReservations);
+      else if (activeView === 'AGENDA') html = renderAgendaView(filteredReservations);
+      else if (activeView === 'STATS') html = renderStatsView();
+
+      container.innerHTML = html;
+      lucide.createIcons();
+    };
+
+    // [記憶體與 UI 優化] 搜尋防抖 (debounce) + 局部 DOM 重繪，避免 Focus 游標遺失與巨型垃圾
+    let _searchDebounceTimer = null;
+    window.updateSearch = (e) => {
+      searchQuery = e.target.value;
+      clearTimeout(_searchDebounceTimer);
+      _searchDebounceTimer = setTimeout(() => {
+        renderActiveViewOnly();
+      }, 200);
+    };
+
+    window.toggleMyReservationsFilter = () => {
+      filterMyReservationsOnly = !filterMyReservationsOnly;
+      render();
+    };
+
+    window.closeModal = () => {
+      activeModal = null;
+      editingReservationData = null;
+      viewingReservationData = null;
+      adminEditingUserId = null;
+      adminEditingRoomId = null;
+      adminEditingDeptName = null;
+      adminEditingEquipName = null;
+      conflictSuggestion = null;
+      render();
+    };
+
+    // ==========================================
+    // CRUD: Create - 新增預約
+    // ==========================================
+    window.openNewReservationModal = (dateStr = null, roomId = null, startTime = '08:30', endTime = '10:00') => {
+      // 如果第 2 個參數看起來像時間 (例如 '08:00')，表示呼叫時沒有傳 roomId，進行智慧相容處理
+      if (roomId && (roomId.includes(':') || roomId.length > 4)) {
+        endTime = startTime !== '10:00' ? startTime : '10:00';
+        startTime = roomId;
+        roomId = null;
+      }
+
+      const defaultDate = dateStr || selectedDateStr || formatDateStr(new Date());
+      const selectedRoom = roomId ? rooms.find(r => r.id === roomId) : null;
+      const roomObj = selectedRoom || (rooms.length > 0 ? rooms[0] : { id: '', name: '' });
+
+      editingReservationData = {
+        id: null,
+        roomId: roomObj.id,
+        roomName: roomObj.name,
+        date: defaultDate,
+        startTime: startTime || '08:30',
+        endTime: endTime || '10:00',
+        reason: '',
+        meetingType: 'INTERNAL',
+        equipment: [],
+        headcount: 10,
+        notes: '',
+        userId: currentUser.id,
+        userName: currentUser.name,
+        dept: currentUser.dept,
+        ext: currentUser.ext,
+        createdAt: formatTimestamp(new Date())
+      };
+      conflictSuggestion = null;
+      activeModal = 'RESERVATION_FORM';
+      render();
+    };
+
+    window.applyTimePreset = (start, end) => {
+      document.getElementById('resStartTime').value = start;
+      document.getElementById('resEndTime').value = end;
+    };
+
+    // ==========================================
+    // CRUD: Create & Update - 儲存預約單
+    // ==========================================
+    window.handleSaveReservation = (e) => {
+      e.preventDefault();
+      const roomId = document.getElementById('resRoomId').value;
+      const roomObj = rooms.find(r => r.id === roomId);
+      const date = document.getElementById('resDate').value;
+      const startTime = document.getElementById('resStartTime').value;
+      const endTime = document.getElementById('resEndTime').value;
+      const reason = document.getElementById('resReason').value.trim();
+      const meetingType = document.getElementById('resMeetingType').value;
+      const headcount = parseInt(document.getElementById('resHeadcount').value) || 1;
+      const notes = document.getElementById('resNotes').value.trim();
+
+      const eqNodes = document.querySelectorAll('input[name="resEquipment"]:checked');
+      const equipment = Array.from(eqNodes).map(n => n.value);
+
+      const startMin = parseTimeToMin(startTime);
+      const endMin = parseTimeToMin(endTime);
+
+      if (startMin >= endMin) {
+        showToast('時間設定錯誤：結束時間必須晚於開始時間！', 'error');
+        return;
+      }
+
+      // 重複時段衝突檢測
+      const conflict = reservations.find(r => {
+        if (editingReservationData.id && r.id === editingReservationData.id) return false;
+        if (r.roomId !== roomId || r.date !== date) return false;
+
+        const rStart = parseTimeToMin(r.startTime);
+        const rEnd = parseTimeToMin(r.endTime);
+
+        return startMin < rEnd && endMin > rStart;
+      });
+
+      if (conflict) {
+        conflictSuggestion = conflict;
+        showToast(`時段衝突！「${roomObj ? roomObj.name : '會議室'}」在 ${date} ${conflict.startTime}~${conflict.endTime} 已被【${conflict.dept} ${conflict.userName}】預約。`, 'error');
+        render();
+        return;
+      }
+
+      if (editingReservationData.id) {
+        // Update (更新)
+        reservations = reservations.map(r => r.id === editingReservationData.id ? {
+          ...r,
+          roomId,
+          roomName: roomObj ? roomObj.name : '',
+          date,
+          startTime,
+          endTime,
+          reason,
+          meetingType,
+          equipment,
+          headcount,
+          notes
+        } : r);
+        showToast('會議室預約紀錄更新成功！');
+      } else {
+        // Create (新增)
+        const newRes = {
+          id: `res-${Date.now()}`,
+          roomId,
+          roomName: roomObj ? roomObj.name : '',
+          date,
+          startTime,
+          endTime,
+          reason,
+          meetingType,
+          equipment,
+          headcount,
+          notes,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          dept: currentUser.dept,
+          ext: currentUser.ext,
+          createdAt: formatTimestamp(new Date())
+        };
+        reservations.unshift(newRes);
+        showToast('成功新增會議室預約！');
+      }
+
+      equipmentOptions = [...DEFAULT_EQUIPMENT_OPTIONS];
+        saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
+        saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
+      selectedDateStr = date;
+      closeModal();
+    };
+
+    // ==========================================
+    // CRUD: Read - 檢視預約
+    // ==========================================
+    window.openViewReservationModal = (resId) => {
+      const res = reservations.find(r => r.id === resId);
+      if (res) {
+        viewingReservationData = res;
+        activeModal = 'VIEW_RES';
+        render();
+      }
+    };
+
+    // ==========================================
+    // CRUD: Update - 編輯已有預約
+    // ==========================================
+    window.openEditReservationModal = (resId) => {
+      const res = reservations.find(r => r.id === resId);
+      if (res && canModifyReservation(res)) {
+        editingReservationData = { ...res };
+        conflictSuggestion = null;
+        activeModal = 'RESERVATION_FORM';
+        render();
+      } else {
+        showToast('您沒有修改此筆預約的權限！', 'error');
+      }
+    };
+
+    // ==========================================
+    // CRUD: Delete - 刪除 / 取消預約
+    // ==========================================
+    window.deleteReservation = (resId) => {
+      const res = reservations.find(r => r.id === resId);
+      if (!res) return;
+
+      if (!canModifyReservation(res)) {
+        showToast('您沒有刪除此筆預約的權限！', 'error');
+        return;
+      }
+
+      showConfirmModal('取消預約確認', `確定要取消／刪除「${res.reason}」在 ${res.date} (${res.startTime}~${res.endTime}) 的預約嗎？`, () => {
+        reservations = reservations.filter(r => r.id !== res.id);
+        equipmentOptions = [...DEFAULT_EQUIPMENT_OPTIONS];
+        saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
+        saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
+        showToast('已成功取消並刪除該筆預約。');
+        closeModal();
+      });
+    };
+
+    window.openProfileModal = () => {
+      activeModal = 'PROFILE';
+      render();
+    };
+
+    window.handleSaveProfile = (e) => {
+      e.preventDefault();
+      const name = document.getElementById('profileName').value.trim();
+      const dept = document.getElementById('profileDept').value;
+      const ext = document.getElementById('profileExt').value.trim();
+      const password = document.getElementById('profilePassword').value.trim();
+
+      users = users.map(u => {
+        if (u.id === currentUser.id) {
+          const updated = { ...u, name, dept, ext, mustChangePassword: false };
+          if (password) updated.password = password;
+          return updated;
+        }
+        return u;
+      });
+      currentUser = { ...currentUser, name, dept, ext, mustChangePassword: false };
+
+      saveStorage(STORAGE_KEYS.USERS, users);
+      try { sessionStorage.setItem('hc_current_user', JSON.stringify(currentUser)); } catch(e){}
+
+      showToast('個人帳號資料已完成更新！');
+      closeModal();
+    };
+
+    window.handleSaveMustChangePw = (e) => {
+      e.preventDefault();
+      const newPw = document.getElementById('newPwInput').value.trim();
+      const confirmPw = document.getElementById('confirmPwInput').value.trim();
+
+      if (newPw.length < 4) {
+        showToast('新密碼長度請至少輸入 4 個字元！', 'error');
+        return;
+      }
+      if (newPw !== confirmPw) {
+        showToast('兩次輸入的新密碼不一致！', 'error');
+        return;
+      }
+
+      users = users.map(u => u.id === currentUser.id ? { ...u, password: newPw, mustChangePassword: false } : u);
+      const { password: _, ...safeCurrent } = { ...currentUser, mustChangePassword: false };
+      currentUser = safeCurrent;
+
+      saveStorage(STORAGE_KEYS.USERS, users);
+      try { sessionStorage.setItem('hc_current_user', JSON.stringify(currentUser)); } catch(e){}
+
+      showToast('密碼已成功更新，請妥善保管新密碼！');
+      closeModal();
+    };
+
+    window.openAdminConsole = () => {
+      activeModal = 'ADMIN';
+      adminTab = 'USERS';
+      adminEditingUserId = null;
+      adminEditingRoomId = null;
+      adminEditingDeptName = null;
+      adminEditingEquipName = null;
+      render();
+    };
+
+    window.switchAdminTab = (tab) => {
+      adminTab = tab;
+      adminEditingUserId = null;
+      adminEditingRoomId = null;
+      adminEditingDeptName = null;
+      adminEditingEquipName = null;
+      render();
+    };
+
+    // 管理者 - 帳號 CRUD
+    window.startAdminUserEdit = (userId) => {
+      const targetUser = users.find(u => u.id === userId);
+      const isTargetSuper = targetUser && (targetUser.role === 'superadmin' || targetUser.id === '99999');
+      const isCallerSuper = currentUser && currentUser.role === 'superadmin';
+      if (isTargetSuper && !isCallerSuper) {
+        showToast('保護機制：一般管理者無權更動超級管理員帳號！', 'error');
+        return;
+      }
+      adminEditingUserId = userId;
+      render();
+    };
+
+    window.cancelAdminUserEdit = () => {
+      adminEditingUserId = null;
+      render();
+    };
+
+    window.handleAdminSaveUser = (e) => {
+      e.preventDefault();
+      const id = document.getElementById('adminUserId').value.trim();
+      const name = document.getElementById('adminUserName').value.trim();
+      const dept = document.getElementById('adminUserDept').value;
+      const ext = document.getElementById('adminUserExt').value.trim();
+      const role = document.getElementById('adminUserRole').value;
+      const newPw = document.getElementById('adminUserPassword') ? document.getElementById('adminUserPassword').value.trim() : '';
+
+      const isCallerSuper = currentUser && currentUser.role === 'superadmin';
+      if (role === 'superadmin' && !isCallerSuper) {
+        showToast('保護機制：一般管理者無權指派超級管理員權限！', 'error');
+        return;
+      }
+
+      const deptObj = departments.find(d => d.name === dept);
+      const defaultPw = deptObj ? deptObj.phone : '03-5355100';
+
+      if (adminEditingUserId) {
+        const targetUser = users.find(u => u.id === adminEditingUserId);
+        const isTargetSuper = targetUser && (targetUser.role === 'superadmin' || targetUser.id === '99999');
+        if (isTargetSuper && !isCallerSuper) {
+          showToast('保護機制：一般管理者無權修改超級管理員資料！', 'error');
+          return;
+        }
+
+        users = users.map(u => {
+          if (u.id === adminEditingUserId) {
+            const updatedUser = { ...u, name, dept, ext, role };
+            if (newPw) {
+              updatedUser.password = newPw;
+              updatedUser.mustChangePassword = false;
+            }
+            return updatedUser;
+          }
+          return u;
+        });
+        showToast(`已成功更新帳號 (工號: ${adminEditingUserId})${newPw ? '，且密碼已重新設定！' : ''}`);
+        adminEditingUserId = null;
+      } else {
+        if (users.some(u => u.id === id)) {
+          showToast('此工號帳號已存在！', 'error');
+          return;
+        }
+        const setPw = newPw || defaultPw;
+        users.push({
+          id,
+          name,
+          dept,
+          ext,
+          role,
+          password: setPw,
+          mustChangePassword: !newPw
+        });
+        showToast(`新增帳號成功！${newPw ? '使用自訂初始密碼' : '預設密碼為科室專線: ' + defaultPw}`);
+      }
+
+      saveStorage(STORAGE_KEYS.USERS, users);
+      render();
+    };
+
+    window.deleteAdminUser = (userId) => {
+      const targetUser = users.find(u => u.id === userId);
+      const isTargetSuper = targetUser && (targetUser.role === 'superadmin' || targetUser.id === '99999');
+      if (isTargetSuper) {
+        showToast('保護機制：無法刪除超級管理員帳號！', 'error');
+        return;
+      }
+      showConfirmModal('刪除帳號確認', `確定要刪除工號 ${userId} 的使用者帳號嗎？`, () => {
+        users = users.filter(u => u.id !== userId);
+        saveStorage(STORAGE_KEYS.USERS, users);
+        showToast(`已刪除工號 ${userId} 帳號。`);
+        render();
+      });
+    };
+
+    window.openAdminResetPasswordPrompt = (userId) => {
+      const u = users.find(x => x.id === userId);
+      if (!u) return;
+
+      const isTargetSuper = u.role === 'superadmin' || u.id === '99999';
+      const isCallerSuper = currentUser && currentUser.role === 'superadmin';
+      if (isTargetSuper && !isCallerSuper) {
+        showToast('保護機制：一般管理者無權重置超級管理員密碼！', 'error');
+        return;
+      }
+
+      const deptObj = departments.find(d => d.name === u.dept);
+      const defaultPw = deptObj ? deptObj.phone : '03-5355100';
+
+      showConfirmModal(
+        `🔑 重置使用者密碼 (工號: ${u.id} - ${u.name})`,
+        `確定要將同仁「${u.name}」的密碼重置為科室預設公務專線 (${defaultPw}) 嗎？基於資訊安全，管理者無法檢視該帳號之原始密碼。`,
+        () => {
+          users = users.map(x => x.id === userId ? { ...x, password: defaultPw, mustChangePassword: true } : x);
+          saveStorage(STORAGE_KEYS.USERS, users);
+          showToast(`已成功重置工號 ${userId} (${u.name}) 密碼為公務專線: ${defaultPw}`);
+          render();
+        }
+      );
+    };
+
+    // 管理者 - 會議室 CRUD
+    window.startAdminRoomEdit = (roomId) => {
+      adminEditingRoomId = roomId;
+      render();
+    };
+
+    window.cancelAdminRoomEdit = () => {
+      adminEditingRoomId = null;
+      render();
+    };
+
+    window.handleAdminSaveRoom = (e) => {
+      e.preventDefault();
+      const id = document.getElementById('adminRoomId').value.trim();
+      const name = document.getElementById('adminRoomName').value.trim();
+      const capacity = parseInt(document.getElementById('adminRoomCapacity').value) || 10;
+
+      if (adminEditingRoomId) {
+        rooms = rooms.map(r => r.id === adminEditingRoomId ? { ...r, name, capacity } : r);
+        showToast(`已更新會議室資料 (代號: ${adminEditingRoomId})`);
+        adminEditingRoomId = null;
+      } else {
+        if (rooms.some(r => r.id === id)) {
+          showToast('該會議室代號 (ID) 已存在！', 'error');
+          return;
+        }
+        rooms.push({ id, name, capacity, location: '衛生社福大樓' });
+        showToast(`成功新增會議室「${name}」！`);
+      }
+
+      saveStorage(STORAGE_KEYS.ROOMS, rooms);
+      render();
+    };
+
+    window.deleteAdminRoom = (roomId) => {
+      const rm = rooms.find(r => r.id === roomId);
+      showConfirmModal('刪除會議室確認', `確定要刪除「${rm ? rm.name : roomId}」嗎？`, () => {
+        rooms = rooms.filter(r => r.id !== roomId);
+        saveStorage(STORAGE_KEYS.ROOMS, rooms);
+        showToast(`已刪除會議室 (${roomId})`);
+        render();
+      });
+    };
+
+        // 管理者 - 特殊設備與服務需求 CRUD
+    window.startAdminEquipEdit = (equipName) => {
+      adminEditingEquipName = equipName;
+      render();
+    };
+
+    window.cancelAdminEquipEdit = () => {
+      adminEditingEquipName = null;
+      render();
+    };
+
+    window.handleAdminSaveEquip = (e) => {
+      e.preventDefault();
+      const name = document.getElementById('adminEquipName').value.trim();
+      if (!name) return;
+
+      if (adminEditingEquipName) {
+        if (name !== adminEditingEquipName && equipmentOptions.includes(name)) {
+          showToast('該設備/服務需求名稱已存在！', 'error');
+          return;
+        }
+
+        // Update equipmentOptions list
+        equipmentOptions = equipmentOptions.map(eq => eq === adminEditingEquipName ? name : eq);
+        
+        // Also update existing reservation equipment lists
+        reservations = reservations.map(r => {
+          if (r.equipment && r.equipment.includes(adminEditingEquipName)) {
+            const newEqList = r.equipment.map(item => item === adminEditingEquipName ? name : item);
+            return { ...r, equipment: newEqList };
+          }
+          return r;
+        });
+
+        saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
+        showToast(`已成功修改設備名稱為「${name}」！`);
+        adminEditingEquipName = null;
+      } else {
+        if (equipmentOptions.includes(name)) {
+          showToast('該設備/服務需求名稱已存在！', 'error');
+          return;
+        }
+        equipmentOptions.push(name);
+        showToast(`成功新增設備與服務需求項目「${name}」！`);
+      }
+
+      saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
+      render();
+    };
+
+    window.deleteAdminEquip = (equipName) => {
+      const usageCount = reservations.filter(r => r.equipment && r.equipment.includes(equipName)).length;
+      const warningText = usageCount > 0 ? ` (注意：目前有 ${usageCount} 場預約選用此項目，刪除後將自動自預約紀錄移除此項需求)` : '';
+
+      showConfirmModal('刪除設備項目確認', `確定要刪除「${equipName}」項目嗎？${warningText}`, () => {
+        equipmentOptions = equipmentOptions.filter(eq => eq !== equipName);
+        
+        // Clean up from existing reservations
+        reservations = reservations.map(r => {
+          if (r.equipment && r.equipment.includes(equipName)) {
+            return { ...r, equipment: r.equipment.filter(item => item !== equipName) };
+          }
+          return r;
+        });
+
+        saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
+        saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
+        showToast(`已刪除「${equipName}」項目。`);
+        render();
+      });
+    };
+
+    // 管理者 - 科室 CRUD
+    window.startAdminDeptEdit = (deptName) => {
+      adminEditingDeptName = deptName;
+      render();
+    };
+
+    window.cancelAdminDeptEdit = () => {
+      adminEditingDeptName = null;
+      adminEditingEquipName = null;
+      render();
+    };
+
+    window.handleAdminSaveDept = (e) => {
+      e.preventDefault();
+      const name = document.getElementById('adminDeptName').value.trim();
+      const phone = document.getElementById('adminDeptPhone').value.trim();
+
+      if (adminEditingDeptName) {
+        departments = departments.map(d => d.name === adminEditingDeptName ? { ...d, phone } : d);
+        showToast(`已更新「${adminEditingDeptName}」的公務專線為 ${phone}`);
+        adminEditingDeptName = null;
+      adminEditingEquipName = null;
+      } else {
+        if (departments.some(d => d.name === name)) {
+          showToast('該科室名稱已存在！', 'error');
+          return;
+        }
+        departments.push({ name, phone });
+        showToast(`成功新增科室「${name}」(專線: ${phone})`);
+      }
+
+      saveStorage(STORAGE_KEYS.DEPARTMENTS, departments);
+      render();
+    };
+
+    window.deleteAdminDept = (deptName) => {
+      showConfirmModal('刪除科室確認', `確定要刪除「${deptName}」科室嗎？`, () => {
+        departments = departments.filter(d => d.name !== deptName);
+        saveStorage(STORAGE_KEYS.DEPARTMENTS, departments);
+        showToast(`已刪除「${deptName}」科室`);
+        render();
+      });
+    };
+
+    // 管理者 - 預約強制刪除
+    window.adminDeleteReservation = (resId) => {
+      const res = reservations.find(r => r.id === resId);
+      if (!res) return;
+
+      showConfirmModal('管理者強制刪除確認', `確定要強制刪除「${res.reason}」這筆預約嗎？`, () => {
+        reservations = reservations.filter(r => r.id !== resId);
+        equipmentOptions = [...DEFAULT_EQUIPMENT_OPTIONS];
+        saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
+        saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
+        showToast('已成功強制刪除該筆預約。');
+        render();
+      });
+    };
+
+    // 啟動初始化掛載
+    window.onload = async () => {
+      await initCloudData();
+      reloadStateFromStorage();
+      render();
+
+      // [記憶體與 UI 優化] 智慧靜默輪詢 (每 30 秒)，防止強行重繪打斷使用者輸入，資料無變更時跳過 render
+    let _lastDataJsonStr = '';
+
+    _pollingTimerId = setInterval(async () => {
+      if (!currentUser) return; // 未登入時不輪詢
+      // 若使用者正在操作 Modal 彈窗或處於輸入框焦點狀態，延後全頁面重繪
+      const isUserTyping = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT');
+
+      try {
+        const res = await fetch('/api/data');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+            const newJsonStr = JSON.stringify(data);
+            if (newJsonStr !== _lastDataJsonStr) {
+              _lastDataJsonStr = newJsonStr;
+              appCloudData = data;
+              reloadStateFromStorage();
+              if (!activeModal && !isUserTyping) {
+                renderActiveViewOnly();
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // 靜默失敗，不干擾使用者
+      }
+    }, 30000);
+  };
