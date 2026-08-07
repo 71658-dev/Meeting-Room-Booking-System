@@ -701,7 +701,6 @@ END:VCALENDAR`;
                 ${days.map(cell => {
                   const dayReservations = filteredReservations.filter(r => r.date === cell.dateStr);
                   const isToday = cell.dateStr === todayStr;
-                  const isSelected = cell.dateStr === selectedDateStr;
 
                   return `
                     <div onclick="selectAndOpenDaySchedule('${cell.dateStr}')"
@@ -711,11 +710,9 @@ END:VCALENDAR`;
                       aria-label="${cell.dateStr} 預約概況"
                       class="group relative p-2 flex flex-col calendar-day-hover min-h-[110px] rounded-none cursor-pointer select-none transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${
                         cell.isCurrentMonth
-                          ? (isSelected
-                              ? 'bg-teal-50/90 border-2 border-teal-600 z-10 shadow-md ring-2 ring-teal-500/40'
-                              : (isToday
-                                  ? 'bg-amber-50/90 border-2 border-amber-500 z-10 shadow-md ring-2 ring-amber-400/50'
-                                  : 'bg-white hover:bg-teal-50/60 hover:z-10 hover:shadow-md'))
+                          ? (isToday
+                              ? 'bg-amber-50/90 border-2 border-amber-500 z-10 shadow-md ring-2 ring-amber-400/50'
+                              : 'bg-white hover:bg-teal-50/60 hover:z-10 hover:shadow-md')
                           : 'bg-slate-100/80 text-slate-500 hover:bg-slate-100 font-medium'
                       }">
 
@@ -725,24 +722,12 @@ END:VCALENDAR`;
                       <span class="text-xs font-extrabold rounded-full w-6 h-6 flex items-center justify-center transition-colors ${
                         isToday
                           ? 'bg-amber-500 text-white shadow-xs'
-                          : (isSelected
-                              ? 'bg-teal-600 text-white font-black'
-                              : (cell.isCurrentMonth ? 'text-slate-700 group-hover:text-teal-700 font-bold' : 'text-slate-400'))
+                          : (cell.isCurrentMonth ? 'text-slate-700 group-hover:text-teal-700 font-bold' : 'text-slate-400')
                       }">
                         ${cell.date.getDate()}
                       </span>
                       ${isToday ? '<span class="text-[9px] font-black text-amber-600 bg-amber-100 px-1.5 py-0.2 rounded-full">今天</span>' : ''}
-                      ${isSelected ? '<span class="text-[9px] font-black text-teal-700 bg-teal-100 px-1.5 py-0.2 rounded-full">已點選</span>' : ''}
                     </div>
-
-                    <!-- Quick Add Button on Hover (僅限今日與未來日期顯示) -->
-                    ${cell.dateStr >= todayStr ? `
-                    <button onclick="event.stopPropagation(); openNewReservationModal('${cell.dateStr}')"
-                      class="text-[10px] font-bold text-teal-700 hover:text-teal-900 opacity-0 group-hover:opacity-100 transition-all duration-200 px-2 py-0.5 rounded-lg bg-teal-100/90 hover:bg-teal-200 border border-teal-300 flex items-center gap-0.5 shadow-2xs"
-                      title="在此日期新增預約">
-                      <i data-lucide="plus" class="w-3 h-3"></i> 預約
-                    </button>
-                    ` : ''}
                   </div>
 
                   <!-- Reservations list snippet inside Date Box -->
@@ -757,20 +742,20 @@ END:VCALENDAR`;
 
                       return `
                         <div onclick="event.stopPropagation(); openViewReservationModal('${res.id}')"
-                          class="p-1.5 rounded-xl text-[11px] cursor-pointer transition transform hover:-translate-y-0.5 shadow-2xs ${
+                          class="p-2 rounded-none text-xs cursor-pointer transition-all duration-150 hover:-translate-y-px hover:shadow-md border-l-4 ${
                             isMine
-                              ? 'bg-teal-700 text-white font-medium ring-2 ring-teal-400 shadow-md'
-                              : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200'
+                              ? 'bg-teal-50 border-l-teal-500 text-teal-950 shadow-sm'
+                              : 'bg-white border-l-slate-300 text-slate-800 shadow-2xs hover:bg-slate-50'
                           }">
                           <div class="flex items-center justify-between gap-1 mb-0.5">
-                            <span class="truncate font-black text-[10px] ${isMine ? 'text-teal-100' : 'text-teal-700'} flex items-center gap-1">
+                            <span class="truncate font-bold text-xs ${isMine ? 'text-teal-800' : 'text-slate-700'} flex items-center gap-1">
                               <span class="w-1.5 h-1.5 rounded-full ${roomStyle.dot} shrink-0"></span>
                               ${escapeHtml(res.roomName.replace('衛生社福大樓', ''))}
                             </span>
-                            ${isMine ? '<span class="bg-amber-400 text-slate-900 text-[9px] font-black px-1 rounded-xs shrink-0">我的</span>' : ''}
+                            ${isMine ? '<span class="bg-teal-600 text-white text-[10px] font-black px-1 py-px rounded-none shrink-0">我的</span>' : ''}
                           </div>
-                          <div class="truncate font-bold text-xs leading-tight">${escapeHtml(res.reason)}</div>
-                          <div class="flex items-center justify-between text-[10px] mt-1 ${isMine ? 'text-teal-100' : 'text-slate-500'}">
+                          <div class="truncate font-bold text-sm leading-snug text-slate-900">${escapeHtml(res.reason)}</div>
+                          <div class="flex items-center justify-between text-xs mt-1 ${isMine ? 'text-teal-700' : 'text-slate-500'}">
                             <span class="truncate">${escapeHtml(res.dept)}-${escapeHtml(res.userName)}</span>
                             <span class="shrink-0 font-mono font-bold">${res.startTime}-${res.endTime}</span>
                           </div>
@@ -815,7 +800,8 @@ END:VCALENDAR`;
     // 2B. 單日時段表視圖 (Timeline View Component)
     // ==========================================
     const renderTimelineView = (filteredReservations) => {
-      const activeDateStr = selectedDateStr || formatDateStr(currentDate);
+      const todayStr = formatDateStr(new Date());
+      const activeDateStr = selectedDateStr || todayStr;
       const dayReservations = filteredReservations.filter(r => r.date === activeDateStr);
 
       const hours = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
@@ -882,11 +868,14 @@ END:VCALENDAR`;
                       <!-- 08:00 - 17:00 Timeline Track (9 Slots) -->
                       <div class="col-span-9 grid grid-cols-9 h-full relative border-l border-slate-200 bg-slate-50/40 divide-x divide-slate-100">
                         ${[8, 9, 10, 11, 12, 13, 14, 15, 16].map(hour => {
-                          return `
+                          return activeDateStr >= todayStr ? `
                             <div onclick="openNewReservationModal('${activeDateStr}', '${String(hour).padStart(2, '0')}:00', '${String(hour + 1).padStart(2, '0')}:00')"
                               class="h-full hover:bg-teal-100/40 transition cursor-pointer flex items-center justify-center text-[10px] text-slate-300 hover:text-teal-600 font-bold"
                               title="點擊在此時段 (${String(hour).padStart(2, '0')}:00) 快速預約">
                               +
+                            </div>
+                          ` : `
+                            <div class="h-full flex items-center justify-center text-[10px] text-slate-200 font-bold cursor-not-allowed">
                             </div>
                           `;
                         }).join('')}
@@ -906,11 +895,14 @@ END:VCALENDAR`;
                             <div onclick="openViewReservationModal('${res.id}')"
                               style="left: ${leftPercent}%; width: ${widthPercent}%;"
                               title="${escapeHtml(res.reason)} (${res.startTime}~${res.endTime}) - ${escapeHtml(res.dept)} ${escapeHtml(res.userName)}"
-                              class="absolute top-1.5 bottom-1.5 rounded-xl px-2.5 text-[11px] cursor-pointer flex flex-col justify-center overflow-hidden transition shadow-sm hover:scale-[1.02] z-10 ${
-                                isMine ? 'bg-teal-700 text-white font-bold ring-2 ring-teal-300' : 'bg-slate-800 text-white border border-slate-700'
+                              class="absolute top-1 bottom-1 rounded-none px-2.5 py-1 cursor-pointer flex flex-col justify-center overflow-hidden transition-all duration-150 shadow-sm hover:shadow-lg hover:z-20 z-10 border-l-4 ${
+                                isMine
+                                  ? 'bg-teal-50/95 border-l-teal-500 text-teal-950 border border-teal-300 ring-1 ring-teal-300/40'
+                                  : 'bg-amber-50/95 border-l-amber-500 text-slate-900 border border-amber-300 hover:bg-amber-100/90'
                               }">
-                              <div class="truncate font-bold">${escapeHtml(res.reason)}</div>
-                              <div class="truncate text-[9px] opacity-90">${res.startTime}~${res.endTime} (${escapeHtml(res.userName)})</div>
+                              <div class="truncate font-bold text-sm leading-snug">${escapeHtml(res.reason)}</div>
+                              <div class="truncate text-xs font-mono opacity-80">${res.startTime}~${res.endTime}</div>
+                              <div class="truncate text-xs opacity-70">${escapeHtml(res.dept)} - ${escapeHtml(res.userName)}</div>
                             </div>
                           `;
                         }).join('')}
@@ -1119,7 +1111,8 @@ END:VCALENDAR`;
         const dateObj = new Date(selectedDateStr + 'T00:00:00');
         const weekDayMap = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
         const formattedTitle = `${dateObj.getFullYear()} 年 ${dateObj.getMonth() + 1} 月 ${dateObj.getDate()} 日 (${weekDayMap[dateObj.getDay()]})`;
-        const isToday = selectedDateStr === formatDateStr(new Date());
+        const todayStr = formatDateStr(new Date());
+        const isToday = selectedDateStr === todayStr;
 
         return `
           <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
@@ -1191,7 +1184,7 @@ END:VCALENDAR`;
                 </div>
 
                 <div class="text-[11px] text-teal-700 font-bold bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200">
-                  💡 點擊空白時段區塊可直接預約該會議室與時間
+                  ${selectedDateStr >= todayStr ? '💡 點擊空白時段區塊可直接預約該會議室與時間' : '🔒 過去日期僅供查看既有預約紀錄，無法新增預約'}
                 </div>
               </div>
 
@@ -1223,12 +1216,14 @@ END:VCALENDAR`;
                         
                         <!-- Room Interactive Slot Columns -->
                         ${rooms.map(rm => `
-                          <div onclick="openNewReservationModal('${selectedDateStr}', '${rm.id}', '${String(hour).padStart(2, '0')}:00', '${String(hour + 1).padStart(2, '0')}:00')"
-                            class="col-span-5 h-full border-r border-slate-200/60 hover:bg-teal-50/80 transition cursor-pointer p-1 flex items-center justify-center text-[10px] text-slate-400 hover:text-teal-700 font-bold group/slot"
-                            title="點擊在「${escapeHtml(rm.name)}」預約 ${String(hour).padStart(2, '0')}:00 ~ ${String(hour + 1).padStart(2, '0')}:00">
+                          <div onclick="${selectedDateStr >= todayStr ? `openNewReservationModal('${selectedDateStr}', '${rm.id}', '${String(hour).padStart(2, '0')}:00', '${String(hour + 1).padStart(2, '0')}:00')` : `showToast('過去日期不可新增預約！', 'error')`}"
+                            class="col-span-5 h-full border-r border-slate-200/60 ${selectedDateStr >= todayStr ? 'hover:bg-teal-50/80 cursor-pointer' : 'bg-slate-100/30 cursor-not-allowed'} p-1 flex items-center justify-center text-[10px] text-slate-400 font-bold group/slot"
+                            title="${selectedDateStr >= todayStr ? `點擊在「${escapeHtml(rm.name)}」預約 ${String(hour).padStart(2, '0')}:00 ~ ${String(hour + 1).padStart(2, '0')}:00` : '過去日期不可新增預約'}">
+                            ${selectedDateStr >= todayStr ? `
                             <span class="opacity-0 group-hover/slot:opacity-100 transition bg-white px-2 py-1 rounded-lg border border-teal-300 shadow-2xs text-teal-800 flex items-center gap-1">
                               <i data-lucide="plus" class="w-3 h-3"></i> 預約此時段
                             </span>
+                            ` : ''}
                           </div>
                         `).join('')}
                       </div>
@@ -1259,42 +1254,43 @@ END:VCALENDAR`;
                               return `
                                 <div onclick="openViewReservationModal('${res.id}')"
                                   style="top: ${topPx}px; height: ${heightPx - 4}px;"
-                                  class="pointer-events-auto absolute left-1.5 right-1.5 rounded-2xl p-3 text-xs cursor-pointer transition-all duration-200 shadow-md hover:shadow-xl hover:scale-[1.01] z-20 flex flex-col justify-between overflow-hidden border ${
+                                  class="pointer-events-auto absolute left-1 right-1 rounded-none p-3 text-xs cursor-pointer transition-all duration-150 shadow-md hover:shadow-xl hover:z-30 z-20 flex flex-col justify-between overflow-hidden border-2 ${
                                     isMine
-                                      ? 'bg-gradient-to-r from-teal-700 to-teal-800 text-white border-teal-500 ring-2 ring-teal-300/60'
-                                      : 'bg-gradient-to-r from-slate-800 to-slate-900 text-white border-slate-700'
+                                      ? 'bg-teal-50/95 border-teal-500 text-teal-950 ring-1 ring-teal-400/40'
+                                      : 'bg-amber-50/95 border-amber-400 text-slate-900 hover:bg-amber-100/90 hover:border-amber-500'
                                   }">
                                   <!-- Top Header inside Event Card -->
-                                  <div class="flex items-start justify-between gap-1">
-                                    <div class="space-y-1 min-w-0">
+                                  <div class="flex items-start justify-between gap-2 mb-1">
+                                    <div class="space-y-1.5 min-w-0 flex-1">
                                       <div class="flex items-center gap-1.5 flex-wrap">
-                                        <span class="font-mono font-black text-[11px] px-2 py-0.5 rounded-md ${isMine ? 'bg-teal-900/80 text-amber-300 border border-teal-600' : 'bg-slate-700 text-teal-300 border border-slate-600'}">
+                                        <span class="font-mono font-bold text-xs px-2 py-0.5 rounded-none ${isMine ? 'bg-teal-100 text-teal-900 border border-teal-300' : 'bg-amber-100 text-amber-950 border border-amber-300'}">
                                           ⏰ ${res.startTime} ~ ${res.endTime} (佔用 ${(durationMin/60).toFixed(1)} 小時)
                                         </span>
-                                        ${typeObj ? `<span class="px-1.5 py-0.2 text-[9px] font-bold rounded ${typeObj.color}">${typeObj.label}</span>` : ''}
+                                        ${isMine ? '<span class="bg-teal-600 text-white text-xs font-black px-2 py-0.5 rounded-none shadow-2xs">我的預約</span>' : ''}
+                                        ${typeObj ? `<span class="px-2 py-0.5 text-xs font-extrabold rounded-none border ${typeObj.color}">${typeObj.label}</span>` : ''}
                                       </div>
-                                      <h4 class="font-black text-sm tracking-wide text-white truncate leading-tight pt-0.5">
+                                      <h4 class="font-black text-base tracking-wide ${isMine ? 'text-teal-950' : 'text-slate-900'} truncate leading-snug pt-0.5">
                                         ${escapeHtml(res.reason)}
                                       </h4>
                                     </div>
 
-                                    <!-- Quick Buttons -->
+                                    <!-- Quick Action Buttons -->
                                     <div class="flex items-center gap-1 shrink-0">
                                       ${canEdit ? `
-                                        <button onclick="event.stopPropagation(); openEditReservationModal('${res.id}')" class="p-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition" title="編輯預約">
-                                          <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                                        <button onclick="event.stopPropagation(); openEditReservationModal('${res.id}')" class="p-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-none shadow-2xs transition" title="編輯預約">
+                                          <i data-lucide="edit-3" class="w-4 h-4"></i>
                                         </button>
-                                        <button onclick="event.stopPropagation(); deleteReservation('${res.id}')" class="p-1 bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 rounded-lg transition" title="刪除預約">
-                                          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                        <button onclick="event.stopPropagation(); deleteReservation('${res.id}')" class="p-1.5 bg-rose-50 border border-rose-300 hover:bg-rose-100 text-rose-700 rounded-none shadow-2xs transition" title="刪除預約">
+                                          <i data-lucide="trash-2" class="w-4 h-4"></i>
                                         </button>
                                       ` : ''}
                                     </div>
                                   </div>
 
                                   <!-- Bottom Footer inside Event Card -->
-                                  <div class="flex items-center justify-between text-[11px] text-slate-300 pt-1 border-t border-white/10 mt-auto">
+                                  <div class="flex items-center justify-between text-xs font-bold ${isMine ? 'text-teal-900 border-teal-200' : 'text-slate-700 border-amber-200/80'} pt-1.5 border-t mt-auto">
                                     <span class="truncate">👤 ${escapeHtml(res.dept)} - ${escapeHtml(res.userName)} (分機:${escapeHtml(res.ext)})</span>
-                                    <span class="shrink-0 font-bold bg-white/10 px-1.5 py-0.5 rounded">👥 ${res.headcount}人</span>
+                                    <span class="shrink-0 font-bold bg-white/90 border ${isMine ? 'border-teal-300 text-teal-900' : 'border-amber-300 text-amber-900'} px-2 py-0.5 rounded-none font-mono">👥 ${res.headcount}人</span>
                                   </div>
                                 </div>
                               `;
@@ -1493,7 +1489,7 @@ END:VCALENDAR`;
 
         return `
           <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-            <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 animate-fade-in">
+            <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-fade-in">
               <div class="bg-slate-900 px-6 py-4 text-white flex items-center justify-between">
                 <h3 class="font-black text-sm flex items-center gap-2">
                   <i data-lucide="file-text" class="w-4 h-4 text-teal-400"></i>
@@ -1505,41 +1501,41 @@ END:VCALENDAR`;
               </div>
 
               <div class="p-6 space-y-4 text-xs text-slate-700">
-                <div class="bg-teal-50/80 border border-teal-200/80 p-4 rounded-2xl space-y-1">
+                <div class="bg-teal-50/80 border border-teal-200/80 p-4 rounded-lg space-y-1">
                   <div class="flex items-center justify-between">
-                    <span class="text-[10px] text-teal-800 font-bold">會議主題</span>
-                    ${typeObj ? `<span class="px-2 py-0.5 text-[10px] font-bold rounded-md border ${typeObj.color}">${typeObj.label}</span>` : ''}
+                    <span class="text-xs text-teal-800 font-bold">會議主題</span>
+                    ${typeObj ? `<span class="px-2 py-0.5 text-xs font-bold rounded-none border ${typeObj.color}">${typeObj.label}</span>` : ''}
                   </div>
-                  <div class="text-base font-black text-teal-950">${escapeHtml(viewingReservationData.reason)}</div>
+                  <div class="text-lg font-black text-teal-950">${escapeHtml(viewingReservationData.reason)}</div>
                 </div>
 
-                <div class="space-y-2.5 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div class="space-y-2.5 bg-slate-50 p-4 rounded-lg border border-slate-200">
                   <div class="flex items-center gap-2">
                     <i data-lucide="map-pin" class="w-4 h-4 text-slate-400"></i>
                     <span class="font-bold text-slate-500">會議室：</span>
-                    <span class="font-extrabold text-slate-800">${escapeHtml(viewingReservationData.roomName)}</span>
+                    <span class="font-extrabold text-sm text-slate-800">${escapeHtml(viewingReservationData.roomName)}</span>
                   </div>
                   <div class="flex items-center gap-2">
                     <i data-lucide="calendar" class="w-4 h-4 text-slate-400"></i>
                     <span class="font-bold text-slate-500">預約日期：</span>
-                    <span class="font-extrabold text-slate-800">${viewingReservationData.date}</span>
+                    <span class="font-extrabold text-sm text-slate-800">${viewingReservationData.date}</span>
                   </div>
                   <div class="flex items-center gap-2">
                     <i data-lucide="clock" class="w-4 h-4 text-slate-400"></i>
                     <span class="font-bold text-slate-500">預約時間：</span>
-                    <span class="font-black text-teal-700 font-mono">${viewingReservationData.startTime} ~ ${viewingReservationData.endTime}</span>
+                    <span class="font-black text-sm text-teal-700 font-mono">${viewingReservationData.startTime} ~ ${viewingReservationData.endTime}</span>
                   </div>
                   <div class="flex items-center gap-2">
                     <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
                     <span class="font-bold text-slate-500">預估人數：</span>
-                    <span class="font-extrabold text-slate-800">${viewingReservationData.headcount} 人</span>
+                    <span class="font-extrabold text-sm text-slate-800">${viewingReservationData.headcount} 人</span>
                   </div>
                   ${viewingReservationData.equipment && viewingReservationData.equipment.length > 0 ? `
                     <div class="flex items-start gap-2 pt-1 border-t border-slate-200">
                       <i data-lucide="wrench" class="w-4 h-4 text-slate-400 shrink-0 mt-0.5"></i>
                       <span class="font-bold text-slate-500 shrink-0">設備需求：</span>
                       <div class="flex flex-wrap gap-1">
-                        ${viewingReservationData.equipment.map(eq => `<span class="bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold">${eq}</span>`).join('')}
+                        ${viewingReservationData.equipment.map(eq => `<span class="bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded-none text-xs font-bold">${eq}</span>`).join('')}
                       </div>
                     </div>
                   ` : ''}
@@ -1547,16 +1543,16 @@ END:VCALENDAR`;
                     <div class="flex items-start gap-2 pt-1 border-t border-slate-200">
                       <i data-lucide="file-spread-sheet" class="w-4 h-4 text-slate-400 shrink-0 mt-0.5"></i>
                       <span class="font-bold text-slate-500 shrink-0">備註事項：</span>
-                      <span class="text-slate-700 leading-relaxed">${escapeHtml(viewingReservationData.notes)}</span>
+                      <span class="text-sm text-slate-700 leading-relaxed">${escapeHtml(viewingReservationData.notes)}</span>
                     </div>
                   ` : ''}
                 </div>
 
-                <div class="bg-slate-100/70 p-3.5 rounded-2xl border border-slate-200 space-y-1 text-slate-600">
-                  <div class="font-bold text-slate-800 mb-1">登記人員資訊</div>
-                  <div>登記姓名：<span class="font-bold text-slate-800">${escapeHtml(viewingReservationData.userName)}</span> (工號: ${escapeHtml(viewingReservationData.userId)})</div>
-                  <div>所屬科室：${escapeHtml(viewingReservationData.dept)} (分機: ${escapeHtml(viewingReservationData.ext)})</div>
-                  <div class="text-[10px] text-slate-400 pt-1">登記時間：${viewingReservationData.createdAt}</div>
+                <div class="bg-slate-100/70 p-3.5 rounded-lg border border-slate-200 space-y-1.5 text-slate-600">
+                  <div class="font-bold text-sm text-slate-800 mb-1">登記人員資訊</div>
+                  <div class="text-xs">登記姓名：<span class="font-bold text-slate-800">${escapeHtml(viewingReservationData.userName)}</span> (工號: ${escapeHtml(viewingReservationData.userId)})</div>
+                  <div class="text-xs">所屬科室：${escapeHtml(viewingReservationData.dept)} (分機: ${escapeHtml(viewingReservationData.ext)})</div>
+                  <div class="text-xs text-slate-400 pt-1">登記時間：${viewingReservationData.createdAt}</div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 pt-1">
