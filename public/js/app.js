@@ -309,6 +309,12 @@
       return days;
     };
 
+    const getUserEmail = (user) => {
+      if (!user) return 'admin@ems.hccg.gov.tw';
+      if (user.email && user.email.trim()) return user.email.trim();
+      return user.id === '99999' ? 'admin@ems.hccg.gov.tw' : `${user.id}@ems.hccg.gov.tw`;
+    };
+
     const canModifyReservation = (res) => {
       if (!currentUser) return false;
       if (currentUser.role === 'admin' || currentUser.role === 'superadmin') return true;
@@ -519,7 +525,7 @@ END:VCALENDAR`;
       // [記憶體與效能優化] 篩選預約紀錄 (結合快取 _searchKey，避開重複 .toLowerCase() 字串分配)
       const getFilteredReservations = () => {
         return reservations.filter((r) => {
-          if (filterMyReservationsOnly && r.userId !== currentUser.id) return false;
+          if (filterMyReservationsOnly && currentUser && r.userId !== currentUser.id) return false;
           if (selectedRoomFilter !== 'ALL' && r.roomId !== selectedRoomFilter) return false;
           if (selectedDeptFilter !== 'ALL' && r.dept !== selectedDeptFilter) return false;
           if (searchQuery.trim()) {
@@ -553,6 +559,7 @@ END:VCALENDAR`;
 
             <!-- User Status & Actions -->
             <div class="flex items-center gap-3">
+              ${currentUser ? `
               <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl px-3.5 py-1.5 flex items-center gap-3 text-xs shadow-inner">
                 <div class="flex items-center gap-2">
                   <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-4 ring-emerald-500/20 animate-pulse"></span>
@@ -567,6 +574,7 @@ END:VCALENDAR`;
                   <i data-lucide="settings" class="w-3.5 h-3.5"></i>
                   <span>管理者控制台</span>
                 </button>
+              ` : ''}
               ` : ''}
 
               <button onclick="openProfileModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
@@ -737,7 +745,7 @@ END:VCALENDAR`;
                         尚無預約 (點擊查看)
                       </div>
                     ` : dayReservations.map(res => {
-                      const isMine = res.userId === currentUser.id;
+                      const isMine = currentUser ? res.userId === currentUser.id : false;
                       const roomStyle = ROOM_COLOR_STYLES[res.roomId] || { badge: 'bg-teal-100 text-teal-800', dot: 'bg-teal-500' };
 
                       return `
@@ -889,7 +897,7 @@ END:VCALENDAR`;
                           const leftPercent = Math.max(0, ((sMin - 480) / totalSpanMin) * 100);
                           const widthPercent = Math.min(100 - leftPercent, ((eMin - sMin) / totalSpanMin) * 100);
 
-                          const isMine = res.userId === currentUser.id;
+                          const isMine = currentUser ? res.userId === currentUser.id : false;
 
                           return `
                             <div onclick="openViewReservationModal('${res.id}')"
@@ -959,7 +967,7 @@ END:VCALENDAR`;
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                   ${filteredReservations.map(res => {
-                    const isMine = res.userId === currentUser.id;
+                    const isMine = currentUser ? res.userId === currentUser.id : false;
                     const canEdit = canModifyReservation(res);
                     const typeObj = MEETING_TYPES.find(t => t.id === res.meetingType);
 
@@ -1247,7 +1255,7 @@ END:VCALENDAR`;
                               const topPx = ((sMin - 480) / 60) * 64;
                               const heightPx = (durationMin / 60) * 64;
 
-                              const isMine = res.userId === currentUser.id;
+                              const isMine = currentUser ? res.userId === currentUser.id : false;
                               const canEdit = canModifyReservation(res);
                               const typeObj = MEETING_TYPES.find(t => t.id === res.meetingType);
 
@@ -1470,7 +1478,7 @@ END:VCALENDAR`;
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div>
                       <label class="block font-bold text-slate-700 mb-1 text-[11px]">承辦同仁 / 預約者 Email</label>
-                      <input type="email" id="resUserEmail" value="${escapeHtml(editingReservationData.userEmail || (currentUser.email || (currentUser.id === '99999' ? 'admin@ems.hccg.gov.tw' : currentUser.id + '@ems.hccg.gov.tw')))}" required placeholder="例: user@ems.hccg.gov.tw" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold font-mono focus:ring-2 focus:ring-teal-500" />
+                      <input type="email" id="resUserEmail" value="${escapeHtml(editingReservationData.userEmail || getUserEmail(currentUser))}" required placeholder="例: user@ems.hccg.gov.tw" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold font-mono focus:ring-2 focus:ring-teal-500" />
                     </div>
 
                     <div>
@@ -1577,7 +1585,7 @@ END:VCALENDAR`;
                   <div class="font-bold text-sm text-slate-800 mb-1">登記人員資訊</div>
                   <div class="text-xs">登記姓名：<span class="font-bold text-slate-800">${escapeHtml(viewingReservationData.userName)}</span> (工號: ${escapeHtml(viewingReservationData.userId)})</div>
                   <div class="text-xs">所屬科室：${escapeHtml(viewingReservationData.dept)} (分機: ${escapeHtml(viewingReservationData.ext)})</div>
-                  <div class="text-xs">聯絡 Email：<span class="font-mono font-bold text-teal-800">${escapeHtml(viewingReservationData.userEmail || (viewingReservationData.userId + '@ems.hccg.gov.tw'))}</span></div>
+                  <div class="text-xs">聯絡 Email：<span class="font-mono font-bold text-teal-800">${escapeHtml(viewingReservationData.userEmail || getUserEmail({ id: viewingReservationData.userId }))}</span></div>
                   ${viewingReservationData.attendees ? `<div class="text-xs truncate">與會信箱：<span class="font-mono text-slate-700">${escapeHtml(viewingReservationData.attendees)}</span></div>` : ''}
                   <div class="text-xs text-slate-400 pt-1">登記時間：${viewingReservationData.createdAt}</div>
                 </div>
@@ -1619,7 +1627,7 @@ END:VCALENDAR`;
       }
 
       // 3E. 個人資料修改 Modal
-      if (activeModal === 'PROFILE') {
+      if (activeModal === 'PROFILE' && currentUser) {
         return `
           <div onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
             <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 animate-fade-in">
@@ -1654,7 +1662,7 @@ END:VCALENDAR`;
                 </div>
                 <div>
                   <label class="block font-bold text-slate-700 mb-1">聯絡 Email <span class="text-xs font-normal text-slate-400">(用於接收會議通知)</span></label>
-                  <input type="email" id="profileEmail" value="${escapeHtml(currentUser.email || (currentUser.id === '99999' ? 'admin@ems.hccg.gov.tw' : currentUser.id + '@ems.hccg.gov.tw'))}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold font-mono" />
+                  <input type="email" id="profileEmail" value="${escapeHtml(getUserEmail(currentUser))}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold font-mono" />
                 </div>
                 <div>
                   <label class="block font-bold text-slate-700 mb-1">修改密碼 <span class="text-xs font-normal text-slate-400">(如不修改請留空)</span></label>
@@ -2258,12 +2266,12 @@ END:VCALENDAR`;
         equipment: [],
         headcount: 10,
         notes: '',
-        userId: currentUser.id,
-        userName: currentUser.name,
-        userEmail: currentUser.email || (currentUser.id === '99999' ? 'admin@ems.hccg.gov.tw' : `${currentUser.id}@ems.hccg.gov.tw`),
+        userId: currentUser?.id || '',
+        userName: currentUser?.name || '',
+        userEmail: getUserEmail(currentUser),
         attendees: '',
-        dept: currentUser.dept,
-        ext: currentUser.ext,
+        dept: currentUser?.dept || '',
+        ext: currentUser?.ext || '',
         createdAt: formatTimestamp(new Date())
       };
       conflictSuggestion = null;
