@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "npx wrangler dev",
     "build:css": "npx @tailwindcss/cli -i ./src/input.css -o ./public/vendor/tailwind.min.css --minify",
+    "test": "node scripts/test_system.js",
     "deploy": "npm run build:css && npx wrangler deploy --env development",
     "deploy:dev": "npm run build:css && npx wrangler deploy --env development",
     "deploy:prod": "npm run build:css && npx wrangler deploy --env \"\""

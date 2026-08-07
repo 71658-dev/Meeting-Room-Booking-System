@@ -115,13 +115,13 @@
       return fallback;
     };
 
-    // 3. 儲存資料 (全改由 Cloudflare KV 雲端儲存，需帶 JWT Bearer Token)
-    const saveStorage = async (key, data) => {
-      appCloudData[key] = data;
-
-      // CURRENT_USER 屬前端 Session 本機狀態，無須寫入雲端全域 KV 資料庫
-      if (key === STORAGE_KEYS.CURRENT_USER) {
-        return;
+    // 3. 儲存資料 (全改由 Cloudflare KV 雲端儲存，支援 Key-Value 或 Key-Value 物件原子化批次寫入)
+    const saveStorage = async (keyOrObj, data) => {
+      if (typeof keyOrObj === 'object' && keyOrObj !== null) {
+        Object.assign(appCloudData, keyOrObj);
+      } else {
+        appCloudData[keyOrObj] = data;
+        if (keyOrObj === STORAGE_KEYS.CURRENT_USER) return;
       }
 
       try {
@@ -2115,10 +2115,12 @@ END:VCALENDAR`;
           `;
         }
 
-        showToast(`歡迎登入！ ${currentUser.dept} - ${currentUser.name} (${currentUser.id})`);
+        if (currentUser) {
+          showToast(`歡迎登入！ ${currentUser.dept || ''} - ${currentUser.name || ''} (${currentUser.id || ''})`);
 
-        if (currentUser.mustChangePassword) {
-          activeModal = 'MUST_CHANGE_PW';
+          if (currentUser.mustChangePassword) {
+            activeModal = 'MUST_CHANGE_PW';
+          }
         }
 
         // 250ms 平滑過渡轉場至儀表板主畫面
@@ -2182,7 +2184,7 @@ END:VCALENDAR`;
       const days = getCalendarDays(year, month);
 
       const filteredReservations = reservations.filter((r) => {
-        if (filterMyReservationsOnly && r.userId !== currentUser.id) return false;
+        if (filterMyReservationsOnly && currentUser && r.userId !== currentUser.id) return false;
         if (selectedRoomFilter !== 'ALL' && r.roomId !== selectedRoomFilter) return false;
         if (selectedDeptFilter !== 'ALL' && r.dept !== selectedDeptFilter) return false;
         if (searchQuery.trim()) {
@@ -2287,7 +2289,7 @@ END:VCALENDAR`;
     // ==========================================
     // CRUD: Create & Update - 儲存預約單
     // ==========================================
-    window.handleSaveReservation = (e) => {
+    window.handleSaveReservation = async (e) => {
       e.preventDefault();
       const roomId = document.getElementById('resRoomId').value;
       const roomObj = rooms.find(r => r.id === roomId);
@@ -2339,9 +2341,10 @@ END:VCALENDAR`;
       const attendees = document.getElementById('resAttendees').value.trim();
       const sendEmail = document.getElementById('resSendEmail').checked;
 
+      const actionType = (editingReservationData && editingReservationData.id) ? 'update' : 'create';
       let savedReservation = null;
 
-      if (editingReservationData.id) {
+      if (editingReservationData && editingReservationData.id) {
         // Update (更新)
         reservations = reservations.map(r => {
           if (r.id === editingReservationData.id) {
@@ -2379,12 +2382,12 @@ END:VCALENDAR`;
           equipment,
           headcount,
           notes,
-          userId: currentUser.id,
-          userName: currentUser.name,
+          userId: currentUser?.id || '',
+          userName: currentUser?.name || '',
           userEmail,
           attendees,
-          dept: currentUser.dept,
-          ext: currentUser.ext,
+          dept: currentUser?.dept || '',
+          ext: currentUser?.ext || '',
           createdAt: formatTimestamp(new Date())
         };
         savedReservation = newRes;
@@ -2393,14 +2396,16 @@ END:VCALENDAR`;
       }
 
       equipmentOptions = [...DEFAULT_EQUIPMENT_OPTIONS];
-      saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
-      saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
+      await saveStorage({
+        [STORAGE_KEYS.EQUIPMENT_OPTIONS]: equipmentOptions,
+        [STORAGE_KEYS.RESERVATIONS]: reservations
+      });
       selectedDateStr = date;
       closeModal();
 
       // 自動寄發 Email 通知 (若勾選)
       if (sendEmail && savedReservation) {
-        sendReservationEmail(savedReservation, editingReservationData.id ? 'update' : 'create');
+        sendReservationEmail(savedReservation, actionType);
       }
     };
 
@@ -2412,8 +2417,12 @@ END:VCALENDAR`;
       showToast('正在發送 Email 會議通知...', 'info');
 
       try {
-        const res = await apiFetch('/api/send-email', {
+        const httpRes = await fetch('/api/send-email', {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+          },
           body: JSON.stringify({
             userEmail,
             attendees,
@@ -2422,14 +2431,17 @@ END:VCALENDAR`;
           })
         });
 
-        if (res && res.success) {
+        const res = await httpRes.json();
+
+        if (httpRes.ok && res && res.success) {
           if (res.simulated) {
             showToast(`✉️ ${res.message}`, 'success');
           } else {
-            showToast(`✉️ 會議通知信已成功發送至 ${res.count} 位內外部與會者信箱！`, 'success');
+            const providerText = res.provider ? ` (經由 ${res.provider})` : '';
+            showToast(`✉️ 會議通知信已成功發送至 ${res.count} 位內外部與會者信箱${providerText}！`, 'success');
           }
         } else {
-          showToast(`寄送失敗：${res ? res.message : '未知錯誤'}`, 'error');
+          showToast(`發信提示：${res ? (res.message || res.error) : '服務回應異常'}`, 'error');
         }
       } catch (err) {
         console.error('Send Email Error:', err);
@@ -2476,11 +2488,20 @@ END:VCALENDAR`;
         return;
       }
 
-      showConfirmModal('取消預約確認', `確定要取消／刪除「${res.reason}」在 ${res.date} (${res.startTime}~${res.endTime}) 的預約嗎？`, () => {
+      showConfirmModal('取消預約確認', `確定要取消／刪除「${res.reason}」在 ${res.date} (${res.startTime}~${res.endTime}) 的預約嗎？`, async () => {
         reservations = reservations.filter(r => r.id !== res.id);
         equipmentOptions = [...DEFAULT_EQUIPMENT_OPTIONS];
-        saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
-        saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
+
+        await saveStorage({
+          [STORAGE_KEYS.EQUIPMENT_OPTIONS]: equipmentOptions,
+          [STORAGE_KEYS.RESERVATIONS]: reservations
+        });
+
+        // 觸發寄送取消通知 (若有信箱)
+        if (res.userEmail || res.attendees) {
+          sendReservationEmail(res, 'delete');
+        }
+
         showToast('已成功取消並刪除該筆預約。');
         closeModal();
       });
@@ -2500,14 +2521,16 @@ END:VCALENDAR`;
       const password = document.getElementById('profilePassword').value.trim();
 
       users = users.map(u => {
-        if (u.id === currentUser.id) {
+        if (currentUser && u.id === currentUser.id) {
           const updated = { ...u, name, dept, ext, email, mustChangePassword: false };
           if (password) updated.password = password;
           return updated;
         }
         return u;
       });
-      currentUser = { ...currentUser, name, dept, ext, email, mustChangePassword: false };
+      if (currentUser) {
+        currentUser = { ...currentUser, name, dept, ext, email, mustChangePassword: false };
+      }
 
       saveStorage(STORAGE_KEYS.USERS, users);
       try { sessionStorage.setItem('hc_current_user', JSON.stringify(currentUser)); } catch(e){}
@@ -2845,11 +2868,20 @@ END:VCALENDAR`;
       const res = reservations.find(r => r.id === resId);
       if (!res) return;
 
-      showConfirmModal('管理者強制刪除確認', `確定要強制刪除「${res.reason}」這筆預約嗎？`, () => {
+      showConfirmModal('管理者強制刪除確認', `確定要強制刪除「${res.reason}」這筆預約嗎？`, async () => {
         reservations = reservations.filter(r => r.id !== resId);
         equipmentOptions = [...DEFAULT_EQUIPMENT_OPTIONS];
-        saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
-        saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
+
+        await saveStorage({
+          [STORAGE_KEYS.EQUIPMENT_OPTIONS]: equipmentOptions,
+          [STORAGE_KEYS.RESERVATIONS]: reservations
+        });
+
+        // 觸發寄送刪除取消通知
+        if (res.userEmail || res.attendees) {
+          sendReservationEmail(res, 'delete');
+        }
+
         showToast('已成功強制刪除該筆預約。');
         render();
       });
