@@ -3,7 +3,7 @@ const path = require('path');
 const http = require('http');
 const https = require('https');
 
-const DEV_URL = 'https://meeting-room-booking-system-dev.71658.workers.dev';
+const DEV_URL = process.env.TEST_URL || 'https://meeting-room-booking-system-dev.71658.workers.dev';
 
 console.log('====================================================');
 console.log('🧪 新竹市衛生局會議室預約管理系統 - 自動化測試腳本');
