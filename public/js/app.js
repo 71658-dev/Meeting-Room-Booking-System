@@ -1460,6 +1460,31 @@ END:VCALENDAR`;
                   <textarea id="resNotes" rows="2" placeholder="例：需準備發言名牌、開關冷氣等額外協助..." class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500">${escapeHtml(editingReservationData.notes || '')}</textarea>
                 </div>
 
+                <!-- Email Notifications Setup (支援衛生局同仁、外部專家與民眾) -->
+                <div class="p-3.5 bg-teal-50/70 border border-teal-200/80 rounded-2xl space-y-2.5">
+                  <div class="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                    <i data-lucide="mail" class="w-4 h-4 text-teal-600"></i>
+                    <span>會議 Email 通知設定 (支援內外部人員)</span>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label class="block font-bold text-slate-700 mb-1 text-[11px]">承辦同仁 / 預約者 Email</label>
+                      <input type="email" id="resUserEmail" value="${escapeHtml(editingReservationData.userEmail || (currentUser.email || (currentUser.id === '99999' ? 'admin@ems.hccg.gov.tw' : currentUser.id + '@ems.hccg.gov.tw')))}" required placeholder="例: user@ems.hccg.gov.tw" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold font-mono focus:ring-2 focus:ring-teal-500" />
+                    </div>
+
+                    <div>
+                      <label class="block font-bold text-slate-700 mb-1 text-[11px]">與會人員 / 外部專家 / 民眾 Email (選填)</label>
+                      <input type="text" id="resAttendees" value="${escapeHtml(editingReservationData.attendees || '')}" placeholder="多筆請用逗號分隔，例: expert@hospital.org, public@gmail.com" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold font-mono focus:ring-2 focus:ring-teal-500" />
+                    </div>
+                  </div>
+
+                  <label class="flex items-center gap-2 pt-1 text-xs font-bold text-teal-900 cursor-pointer select-none">
+                    <input type="checkbox" id="resSendEmail" checked class="rounded text-teal-600 focus:ring-teal-500 w-4 h-4" />
+                    <span>☑ 預約完成後自動寄送 Email 會議通知 (含內外部與會者)</span>
+                  </label>
+                </div>
+
                 <!-- Registrant Info Footer -->
                 <div class="p-3 bg-slate-100/70 border border-slate-200 rounded-2xl space-y-1 text-slate-600 text-[11px]">
                   <div class="font-bold text-slate-800 mb-1">登記人員資料 (系統自動帶入)</div>
@@ -1552,10 +1577,12 @@ END:VCALENDAR`;
                   <div class="font-bold text-sm text-slate-800 mb-1">登記人員資訊</div>
                   <div class="text-xs">登記姓名：<span class="font-bold text-slate-800">${escapeHtml(viewingReservationData.userName)}</span> (工號: ${escapeHtml(viewingReservationData.userId)})</div>
                   <div class="text-xs">所屬科室：${escapeHtml(viewingReservationData.dept)} (分機: ${escapeHtml(viewingReservationData.ext)})</div>
+                  <div class="text-xs">聯絡 Email：<span class="font-mono font-bold text-teal-800">${escapeHtml(viewingReservationData.userEmail || (viewingReservationData.userId + '@ems.hccg.gov.tw'))}</span></div>
+                  ${viewingReservationData.attendees ? `<div class="text-xs truncate">與會信箱：<span class="font-mono text-slate-700">${escapeHtml(viewingReservationData.attendees)}</span></div>` : ''}
                   <div class="text-xs text-slate-400 pt-1">登記時間：${viewingReservationData.createdAt}</div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-2 pt-1">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                   <button onclick="downloadICS(viewingReservationData)" class="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition flex items-center justify-center gap-1.5 border border-slate-200">
                     <i data-lucide="calendar-plus" class="w-4 h-4 text-teal-600"></i>
                     <span>匯出行事曆 (.ics)</span>
@@ -1563,6 +1590,10 @@ END:VCALENDAR`;
                   <button onclick="copyMeetingInfo(viewingReservationData)" class="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition flex items-center justify-center gap-1.5 border border-slate-200">
                     <i data-lucide="copy" class="w-4 h-4 text-blue-600"></i>
                     <span>複製會議通知</span>
+                  </button>
+                  <button onclick="sendReservationEmail(viewingReservationData, 'resend')" class="py-2.5 bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold rounded-xl transition flex items-center justify-center gap-1.5 border border-teal-300">
+                    <i data-lucide="mail" class="w-4 h-4 text-teal-600"></i>
+                    <span>發送 Email 通知</span>
                   </button>
                 </div>
 
@@ -1620,6 +1651,10 @@ END:VCALENDAR`;
                 <div>
                   <label class="block font-bold text-slate-700 mb-1">分機號碼</label>
                   <input type="text" id="profileExt" value="${escapeHtml(currentUser.ext)}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold" />
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">聯絡 Email <span class="text-xs font-normal text-slate-400">(用於接收會議通知)</span></label>
+                  <input type="email" id="profileEmail" value="${escapeHtml(currentUser.email || (currentUser.id === '99999' ? 'admin@ems.hccg.gov.tw' : currentUser.id + '@ems.hccg.gov.tw'))}" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 font-bold font-mono" />
                 </div>
                 <div>
                   <label class="block font-bold text-slate-700 mb-1">修改密碼 <span class="text-xs font-normal text-slate-400">(如不修改請留空)</span></label>
@@ -2225,6 +2260,8 @@ END:VCALENDAR`;
         notes: '',
         userId: currentUser.id,
         userName: currentUser.name,
+        userEmail: currentUser.email || (currentUser.id === '99999' ? 'admin@ems.hccg.gov.tw' : `${currentUser.id}@ems.hccg.gov.tw`),
+        attendees: '',
         dept: currentUser.dept,
         ext: currentUser.ext,
         createdAt: formatTimestamp(new Date())
@@ -2290,21 +2327,35 @@ END:VCALENDAR`;
         return;
       }
 
+      const userEmail = document.getElementById('resUserEmail').value.trim();
+      const attendees = document.getElementById('resAttendees').value.trim();
+      const sendEmail = document.getElementById('resSendEmail').checked;
+
+      let savedReservation = null;
+
       if (editingReservationData.id) {
         // Update (更新)
-        reservations = reservations.map(r => r.id === editingReservationData.id ? {
-          ...r,
-          roomId,
-          roomName: roomObj ? roomObj.name : '',
-          date,
-          startTime,
-          endTime,
-          reason,
-          meetingType,
-          equipment,
-          headcount,
-          notes
-        } : r);
+        reservations = reservations.map(r => {
+          if (r.id === editingReservationData.id) {
+            savedReservation = {
+              ...r,
+              roomId,
+              roomName: roomObj ? roomObj.name : '',
+              date,
+              startTime,
+              endTime,
+              reason,
+              meetingType,
+              equipment,
+              headcount,
+              notes,
+              userEmail,
+              attendees
+            };
+            return savedReservation;
+          }
+          return r;
+        });
         showToast('會議室預約紀錄更新成功！');
       } else {
         // Create (新增)
@@ -2322,19 +2373,60 @@ END:VCALENDAR`;
           notes,
           userId: currentUser.id,
           userName: currentUser.name,
+          userEmail,
+          attendees,
           dept: currentUser.dept,
           ext: currentUser.ext,
           createdAt: formatTimestamp(new Date())
         };
+        savedReservation = newRes;
         reservations.unshift(newRes);
         showToast('成功新增會議室預約！');
       }
 
       equipmentOptions = [...DEFAULT_EQUIPMENT_OPTIONS];
-        saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
-        saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
+      saveStorage(STORAGE_KEYS.EQUIPMENT_OPTIONS, equipmentOptions);
+      saveStorage(STORAGE_KEYS.RESERVATIONS, reservations);
       selectedDateStr = date;
       closeModal();
+
+      // 自動寄發 Email 通知 (若勾選)
+      if (sendEmail && savedReservation) {
+        sendReservationEmail(savedReservation, editingReservationData.id ? 'update' : 'create');
+      }
+    };
+
+    // 發送會議 Email 通知函式 (呼叫 Worker API)
+    window.sendReservationEmail = async (reservation, actionType = 'create') => {
+      const userEmail = reservation.userEmail || (currentUser ? currentUser.email : '') || 'admin@ems.hccg.gov.tw';
+      const attendees = reservation.attendees || '';
+
+      showToast('正在發送 Email 會議通知...', 'info');
+
+      try {
+        const res = await apiFetch('/api/send-email', {
+          method: 'POST',
+          body: JSON.stringify({
+            userEmail,
+            attendees,
+            reservation,
+            actionType
+          })
+        });
+
+        if (res && res.success) {
+          if (res.simulated) {
+            showToast(`✉️ ${res.message}`, 'success');
+          } else {
+            showToast(`✉️ 會議通知信已成功發送至 ${res.count} 位內外部與會者信箱！`, 'success');
+          }
+        } else {
+          showToast(`寄送失敗：${res ? res.message : '未知錯誤'}`, 'error');
+        }
+      } catch (err) {
+        console.error('Send Email Error:', err);
+        showToast('發送信件失敗，請稍後重試。', 'error');
+      }
     };
 
     // ==========================================
@@ -2396,22 +2488,23 @@ END:VCALENDAR`;
       const name = document.getElementById('profileName').value.trim();
       const dept = document.getElementById('profileDept').value;
       const ext = document.getElementById('profileExt').value.trim();
+      const email = document.getElementById('profileEmail').value.trim();
       const password = document.getElementById('profilePassword').value.trim();
 
       users = users.map(u => {
         if (u.id === currentUser.id) {
-          const updated = { ...u, name, dept, ext, mustChangePassword: false };
+          const updated = { ...u, name, dept, ext, email, mustChangePassword: false };
           if (password) updated.password = password;
           return updated;
         }
         return u;
       });
-      currentUser = { ...currentUser, name, dept, ext, mustChangePassword: false };
+      currentUser = { ...currentUser, name, dept, ext, email, mustChangePassword: false };
 
       saveStorage(STORAGE_KEYS.USERS, users);
       try { sessionStorage.setItem('hc_current_user', JSON.stringify(currentUser)); } catch(e){}
 
-      showToast('個人帳號資料已完成更新！');
+      showToast('個人帳號資料與 Email 已完成更新！');
       closeModal();
     };
 

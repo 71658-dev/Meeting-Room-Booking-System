@@ -410,6 +410,155 @@ export default {
       }
     }
 
+    // 4. 發送會議 Email 通知 API (POST /api/send-email) - 支援承辦人與內外部專家/民眾與會者
+    if (url.pathname === '/api/send-email' && request.method === 'POST') {
+      try {
+        const authHeader = request.headers.get('Authorization') || '';
+        const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+        const userPayload = await verifyToken(token, jwtSecret);
+
+        if (!userPayload) {
+          return new Response(JSON.stringify({ success: false, message: '未授權的操作，請重新登入！' }), {
+            status: 401,
+            headers: getCorsHeaders(request)
+          });
+        }
+
+        const body = await request.json();
+        const { userEmail = '', attendees = '', reservation = {}, actionType = 'create' } = body;
+
+        // 收集並整理所有有效 Email 收件者 (去重、小寫、格式過濾)
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const rawList = [userEmail, ...attendees.split(/[,;\s]+/)]
+          .map(e => (e || '').trim().toLowerCase())
+          .filter(e => e && emailRegex.test(e));
+
+        const recipientList = Array.from(new Set(rawList));
+
+        if (recipientList.length === 0) {
+          return new Response(JSON.stringify({ success: false, message: '未檢測到有效的 Email 收件者信箱！' }), {
+            status: 400,
+            headers: getCorsHeaders(request)
+          });
+        }
+
+        const actionTextMap = {
+          create: '會議預約成功通知',
+          update: '會議預約異動通知',
+          delete: '會議預約取消通知',
+          resend: '會議預約通知 (補寄)'
+        };
+        const actionText = actionTextMap[actionType] || '會議通知';
+        const subject = `【新竹市衛生局】${actionText} - ${reservation.reason || '會議預約'}`;
+
+        const escapeServerHtml = (str) => {
+          if (!str) return '';
+          return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+        };
+
+        const htmlContent = `
+          <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #cbd5e1; background: #ffffff; overflow: hidden; border-radius: 8px;">
+            <div style="background: #0d9488; color: #ffffff; padding: 20px; text-align: center;">
+              <h2 style="margin: 0; font-size: 20px; font-weight: 800;">新竹市衛生局 - 會議室預約通知</h2>
+              <p style="margin: 6px 0 0 0; font-size: 13px; opacity: 0.9;">${actionText}</p>
+            </div>
+            
+            <div style="padding: 24px; color: #1e293b; line-height: 1.6; font-size: 14px;">
+              <p style="margin-top: 0;"><strong>與會同仁 / 外部專家 / 寶貴貴賓 您好：</strong></p>
+              <p>此為新竹市衛生局會議室預約管理系統自動發出之會議通知信，會議詳細資訊如下：</p>
+              
+              <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px;">
+                <tr style="background: #f8fafc;">
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; width: 30%; color: #475569;">會議主題 / 事由</td>
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #0f766e;">${escapeServerHtml(reservation.reason || '')}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #475569;">會議地點</td>
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #1e293b;">${escapeServerHtml(reservation.roomName || '')}</td>
+                </tr>
+                <tr style="background: #f8fafc;">
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #475569;">預約日期</td>
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #1e293b;">${reservation.date || ''}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #475569;">會議時間</td>
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #0d9488;">${reservation.startTime || ''} ~ ${reservation.endTime || ''}</td>
+                </tr>
+                <tr style="background: #f8fafc;">
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #475569;">承辦同仁 / 科室</td>
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #1e293b;">${escapeServerHtml(reservation.dept || '')} - ${escapeServerHtml(reservation.userName || '')} (分機: ${escapeServerHtml(reservation.ext || '')})</td>
+                </tr>
+                ${reservation.notes ? `
+                <tr>
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; font-weight: bold; color: #475569;">備註事項</td>
+                  <td style="padding: 10px 14px; border: 1px solid #e2e8f0; color: #475569;">${escapeServerHtml(reservation.notes)}</td>
+                </tr>
+                ` : ''}
+              </table>
+
+              <p style="font-size: 12px; color: #64748b; background: #f1f5f9; padding: 10px 14px; border-left: 4px solid #0d9488; margin-top: 20px; border-radius: 4px;">
+                💡 提示：如需將本會議加入您的個人行事曆 (Google / Outlook / Apple Calendar)，請登入預約系統點擊「匯出行事曆 (.ics)」。
+              </p>
+            </div>
+
+            <div style="background: #f8fafc; padding: 14px 20px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
+              新竹市衛生局 會議室預約管理系統 系統自動通知信 (請勿直接回覆)
+            </div>
+          </div>
+        `;
+
+        const resendApiKey = env.RESEND_API_KEY || env.EMAIL_API_KEY;
+
+        if (resendApiKey) {
+          const mailRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${resendApiKey}`
+            },
+            body: JSON.stringify({
+              from: '新竹市衛生局會議預約系統 <onboarding@resend.dev>',
+              to: recipientList,
+              subject: subject,
+              html: htmlContent
+            })
+          });
+
+          const mailResult = await mailRes.json();
+          if (!mailRes.ok) {
+            return new Response(JSON.stringify({ success: false, message: mailResult.message || '發信服務回應錯誤' }), {
+              status: 500,
+              headers: getCorsHeaders(request)
+            });
+          }
+
+          return new Response(JSON.stringify({ success: true, count: recipientList.length, recipients: recipientList }), {
+            headers: getCorsHeaders(request)
+          });
+        } else {
+          return new Response(JSON.stringify({
+            success: true,
+            simulated: true,
+            count: recipientList.length,
+            recipients: recipientList,
+            message: `已傳送通知請求 (模擬發信模式)：共發送給 ${recipientList.length} 位收件者 (${recipientList.join(', ')})`
+          }), {
+            headers: getCorsHeaders(request)
+          });
+        }
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: getCorsHeaders(request)
+        });
+      }
+    }
+
     // 預設由 Cloudflare Assets 回傳 static files (例如 index.html)
     return env.ASSETS.fetch(request);
   }
