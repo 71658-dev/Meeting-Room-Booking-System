@@ -5,11 +5,13 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "npx wrangler dev",
-    "deploy": "npx wrangler deploy --env \"\"",
-    "deploy:prod": "npx wrangler deploy --env \"\"",
-    "deploy:dev": "npx wrangler deploy --env development"
+    "build:css": "npx @tailwindcss/cli -i ./src/input.css -o ./public/vendor/tailwind.min.css --minify",
+    "deploy": "npm run build:css && npx wrangler deploy --env \"\"",
+    "deploy:prod": "npm run build:css && npx wrangler deploy --env \"\"",
+    "deploy:dev": "npm run build:css && npx wrangler deploy --env development"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.0.0",
     "wrangler": "^4.119.0"
   }
 }
