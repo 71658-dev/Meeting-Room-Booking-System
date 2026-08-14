@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>新竹市衛生局 會議室預約管理系統</title>
+  <meta name="description" content="新竹市衛生局會議室預約管理系統">
+
+  <!-- Favicon. SVG only, by choice rather than omission: the mark is four flat rectangles,
+       so it costs less than a 16px PNG and stays sharp on any display. Served from the
+       same origin, which is what `img-src 'self'` in the CSP allows.
+
+       No .ico fallback is shipped. A browser that cannot read an SVG icon falls back to a
+       blank tab glyph, which is what it shows today anyway, and generating a raster set
+       would mean carrying binaries that drift from this file whenever the mark changes.
+       Add one only if a client that actually needs it turns up. -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <meta name="theme-color" content="#9e3526">
+
+  <!-- No webfont CDN: the CSP allows font-src 'self' only, and a CJK webfont costs
+       several megabytes across its unicode-range subsets. index.css instead prefers a
+       locally installed Noto Sans TC and falls back to the platform Chinese face. -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body class="bg-[#dedbd5] text-[#201e1d] font-sans min-h-screen antialiased">
+  <div id="app"></div>
+  <script type="module" src="./main.tsx"></script>
+</body>
+</html>

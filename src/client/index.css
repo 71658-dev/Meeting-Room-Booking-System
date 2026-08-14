@@ -1,0 +1,203 @@
+@import "tailwindcss";
+
+/* =============================================================================
+   Modernist Design System Tokens (改版設計.dc.html)
+   ============================================================================= */
+@theme {
+  --font-sans:
+    "Archivo", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+    system-ui, -apple-system, sans-serif;
+
+  --color-brick-primary: #9e3526;
+  --color-brick-dark: #71261b;
+  --color-brick-light: #fff2ef;
+
+  --color-ink-dark: #201e1d;
+  --color-ink-subtle: #605d5d;
+  --color-ink-muted: #7d7979;
+  --color-ink-placeholder: #9b9797;
+
+  --color-bg-canvas: #dedbd5;
+  --color-bg-card: #f3f2f2;
+  --color-bg-dim: #eae9e9;
+  --color-bg-today: #fff2ef;
+
+  /* Legacy brand compatibility mappings mapped to Brick Red / Ink */
+  --color-brand-50: #fff2ef;
+  --color-brand-100: #ffdcd6;
+  --color-brand-500: #9e3526;
+  --color-brand-600: #9e3526;
+  --color-brand-700: #71261b;
+  --color-brand-800: #541b12;
+
+  --radius-none: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+
+  --shadow-rest: 0 1px 2px rgba(45, 43, 43, 0.14);
+  --shadow-raised: 0 12px 32px rgba(45, 43, 43, 0.22);
+  --shadow-overlay: 0 12px 32px rgba(45, 43, 43, 0.3);
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    background-color: #dedbd5;
+    color: #201e1d;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+  }
+
+  strong, b, .font-bold {
+    font-weight: 700;
+  }
+
+  :focus-visible {
+    outline: 2px solid #9e3526;
+    outline-offset: 2px;
+  }
+
+  /* Force sharp 0px radius on standard elements per Modernist spec */
+  button, input, select, textarea, div {
+    border-radius: 0px;
+  }
+
+  /* 手機版 (手機版.dc.html). iOS Safari zooms the viewport whenever a focused control
+     renders below 16px and never zooms back out, which strands the user mid-form. Several
+     admin dialogs set text-xs on their inputs, so the floor is enforced here rather than
+     at every call site. Matches Tailwind's md breakpoint. */
+  @media (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}
+
+/* Modernist Card & Container Component Styles */
+/* No background here on purpose. This rule is unlayered, so it outranks every Tailwind
+   utility (those live in @layer utilities) no matter what the markup asks for — a card
+   written as `class="mcard bg-[#9e3526]"` still came out #f3f2f2, which is how the public
+   schedule banner ended up rendering white text on a near-white panel. Every .mcard call
+   site sets its own bg-* utility, so the declaration was redundant as well as harmful. */
+.mcard {
+  border: 1px solid rgba(32, 30, 29, 0.35);
+  box-shadow: 0 1px 2px rgba(45, 43, 43, 0.14);
+}
+
+.mcell {
+  transition: transform 0.16s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.16s cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 0.16s;
+}
+
+.mcell:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(45, 43, 43, 0.22);
+  background: #ffffff !important;
+  position: relative;
+  z-index: 2;
+}
+
+/* Monospace Section Tracking Label.
+   Declared inside @layer components so a text-* utility can override the muted grey: the
+   label also sits on the brick-red banners, where #7d7979 lands at about 1.9:1. Unlayered,
+   this rule beat the `text-white/90` those banners already carried. */
+@layer components {
+  .mono-label {
+    font-family: ui-monospace, Menlo, Monaco, "Cascadia Code", monospace;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    color: #7d7979;
+    text-transform: uppercase;
+  }
+}
+
+/* Button & Badge Utilities */
+.btn-brick {
+  background-color: #9e3526;
+  color: #ffffff;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.btn-brick:hover {
+  background-color: #71261b;
+}
+
+.btn-outline-ink {
+  border: 1px solid #201e1d;
+  background-color: #ffffff;
+  color: #201e1d;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.btn-outline-ink:hover {
+  background-color: #eae9e9;
+}
+
+/* Tags — mirrors .tag / .tag-* in the Modernist design system's styles.css.
+   Sized at 12px rather than the system's 11px to sit with this app's
+   scaled-up 公務版 type. */
+.mtag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+}
+.mtag-accent { background-color: #fff2ef; color: #7c1405; }
+.mtag-accent-2 { background-color: #fff2ef; color: #71261b; }
+.mtag-neutral { background-color: #f8f4f4; color: #444141; }
+.mtag-ink { background-color: #201e1d; color: #ffffff; }
+
+/* Table styling */
+.mtable {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid rgba(32, 30, 29, 0.3);
+}
+.mtable th {
+  background-color: #eae9e9;
+  color: #201e1d;
+  font-weight: 700;
+  text-align: left;
+  border-bottom: 2px solid #201e1d;
+}
+.mtable td {
+  border-bottom: 1px solid rgba(32, 30, 29, 0.2);
+}
+
+/* Room category color tags with high contrast */
+.cat-1-badge { background-color: #eae9e9; border-left: 3px solid #201e1d; color: #201e1d; }
+.cat-2-badge { background-color: #f8f4f4; border-left: 3px solid #605d5d; color: #201e1d; }
+.cat-3-badge { background-color: #fff2ef; border-left: 3px solid #9e3526; color: #71261b; }
+.cat-4-badge { background-color: #f3f2f2; border-left: 3px solid #9b9797; color: #201e1d; }
+.cat-5-badge { background-color: #eae9e9; border-left: 3px solid #444141; color: #201e1d; }
+.cat-6-badge { background-color: #fff2ef; border-left: 3px solid #71261b; color: #71261b; }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #eae9e9; }
+::-webkit-scrollbar-thumb { background: #9b9797; }
+::-webkit-scrollbar-thumb:hover { background: #605d5d; }

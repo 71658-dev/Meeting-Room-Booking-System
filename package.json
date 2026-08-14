@@ -1,0 +1,35 @@
+{
+  "name": "meeting-room-booking-system",
+  "version": "2.0.0",
+  "description": "新竹市衛生局會議室預約管理系統",
+  "main": "src/server/index.ts",
+  "scripts": {
+    "dev": "npm run build && npx wrangler dev",
+    "dev:client": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "deploy": "npm run build && npx wrangler deploy --env development",
+    "deploy:dev": "npm run build && npx wrangler deploy --env development",
+    "deploy:prod": "npm run build && npx wrangler deploy --env \"\""
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.21.0",
+    "@cloudflare/workers-types": "^5.20260811.1",
+    "@preact/preset-vite": "^2.10.6",
+    "@tailwindcss/cli": "^4.0.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.119.0"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.0",
+    "hono": "^4.13.1",
+    "lucide-preact": "^1.31.0",
+    "preact": "^10.29.8",
+    "zod": "^4.4.3"
+  }
+}

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="會議室預約系統">
+  <!--
+    Modernist mark: brick field, zero radius, two flat colours, no type.
+
+    The header's brand mark (衛 on brick) is not reusable here — at 16px a 15-stroke
+    character collapses into a smudge. This keeps the same palette and the same flat,
+    square-cornered geometry and states the product instead: a calendar with one day
+    taken.
+
+    Deliberately only three shapes. An earlier draft drew the full 3x2 grid in a pale
+    tint, but at a 16px tab size the 1-unit gutters close up and a tint that light on
+    white disappears — all that detail cost nothing but blur. What survives scaling is
+    the silhouette (tabs + body), the header band, and one filled cell.
+  -->
+  <rect width="32" height="32" fill="#9e3526"/>
+
+  <!-- Binding tabs -->
+  <rect x="10" y="3" width="3" height="6" fill="#ffffff"/>
+  <rect x="19" y="3" width="3" height="6" fill="#ffffff"/>
+
+  <!-- Calendar body -->
+  <rect x="4" y="6" width="24" height="23" fill="#ffffff"/>
+
+  <!-- Header band, knocked back to the brick field -->
+  <rect x="4" y="6" width="24" height="5" fill="#9e3526"/>
+
+  <!-- The booked day -->
+  <rect x="12" y="16" width="8" height="8" fill="#9e3526"/>
+</svg>

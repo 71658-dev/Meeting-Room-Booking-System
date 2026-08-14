@@ -1,0 +1,52 @@
+{
+  "name": "meeting-room-booking-system",
+  "main": "src/server/index.ts",
+  "compatibility_date": "2024-09-23",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
+  "kv_namespaces": [
+    {
+      "binding": "MEETING_DB",
+      "id": "208ec04968e549ea8f98ea561f53239f"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "meeting_db",
+      "database_id": "332b9de8-f03d-4c91-8ba8-5d9f8c9ec06f"
+    }
+  ],
+  "vars": {
+    "TURNSTILE_SITEKEY": "0x4AAAAAAEGpkZprlggOYtpb"
+  },
+  "env": {
+    "development": {
+      "name": "meeting-room-booking-system-dev",
+      "kv_namespaces": [
+        {
+          "binding": "MEETING_DB",
+          "id": "71c3c571562a4c0682e01cc55febf0eb"
+        }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "meeting_db_dev",
+          "database_id": "5a83869c-bae4-41ef-9fc5-66c619e80c7f"
+        }
+      ],
+      "vars": {
+        "TURNSTILE_SITEKEY": "0x4AAAAAAEHj2et8u57PV5z1"
+      }
+    }
+  }
+}
