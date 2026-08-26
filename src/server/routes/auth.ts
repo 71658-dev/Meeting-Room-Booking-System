@@ -45,6 +45,25 @@ async function verifyTurnstileToken(secretKey: string, token: string, remoteIp?:
       body: formData,
     });
     const data = (await res.json()) as any;
+
+    if (!data.success) {
+      // siteverify's `error-codes` is the only thing that separates "the box was ticked
+      // twice" (timeout-or-duplicate) from "this Worker holds the wrong secret"
+      // (invalid-input-secret) from "this hostname is not on the widget" — three causes
+      // that need three different fixes and were previously indistinguishable, because
+      // the field was parsed and dropped. The user-facing copy stays "請重新勾選驗證",
+      // which is right for exactly one of them, so without this line a misconfigured
+      // environment tells everyone to keep re-ticking a box that can never pass.
+      //
+      // Logged, never returned: telling an unauthenticated caller which half of the key
+      // pair is wrong is free reconnaissance. Neither the secret nor the token is
+      // included here for the same reason.
+      console.warn(
+        'Turnstile siteverify rejected:',
+        JSON.stringify({ httpStatus: res.status, errorCodes: data['error-codes'] ?? null })
+      );
+    }
+
     return !!data.success;
   } catch (err) {
     console.error('Turnstile siteverify error:', err);
