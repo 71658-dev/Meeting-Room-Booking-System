@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { D1Database } from '@cloudflare/workers-types';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
+import { readJsonBody, INVALID_JSON_ERROR } from '../middleware/security';
 import { writeAuditLog } from '../middleware/audit';
 import { sendReservationEmail } from '../services/email';
 import { HonoEnv, DBReservation, ReservationWithDetails, Role } from '../types';
@@ -71,6 +72,73 @@ async function findConflict(
     )
     .bind(roomId, date, endMin, startMin, excludeId ?? '')
     .first<any>();
+}
+
+/**
+ * The room a booking names has to be a real, bookable room.
+ *
+ * `roomId` arrived straight from the request and went into the INSERT unchecked. D1 does
+ * not enforce foreign keys by default, so a caller could file a booking against a room id
+ * that does not exist, or against one an admin had deliberately deactivated. Neither is
+ * caught later: the listing endpoints INNER JOIN `rooms`, so such a row is invisible in
+ * every view while still occupying its slot in the overlap check — a booking nobody can
+ * see, cancel, or find the owner of.
+ *
+ * Returns an error message, or null when the room is usable.
+ */
+async function assertBookableRoom(db: D1Database, roomId: string): Promise<string | null> {
+  const room = await db
+    .prepare(`SELECT id, is_active FROM rooms WHERE id = ?`)
+    .bind(roomId)
+    .first<any>();
+
+  if (!room) return '指定的會議室不存在';
+  if (room.is_active !== 1) return '此會議室已停用，無法預約';
+  return null;
+}
+
+/**
+ * Rewrite a booking's equipment links from a client-supplied id list.
+ *
+ * Two things are enforced here that were not before:
+ *
+ *  - the ids are filtered against `equipment` (active rows only), so a caller cannot
+ *    write arbitrary strings into `reservation_equipment`. The rows are unreachable via
+ *    the JOIN in the listing, so they were pure unbounded storage under caller control —
+ *    50 per request, with nothing to garbage-collect them.
+ *  - duplicates are removed. PATCH inserted each element of the array with a bare
+ *    `INSERT`, so `equipmentIds: ['eq-1', 'eq-1']` hit the composite primary key and the
+ *    whole request came back as a 500 *after* the booking had already been updated.
+ */
+async function replaceEquipmentLinks(
+  db: D1Database,
+  reservationId: string,
+  equipmentIds: string[] | undefined,
+  clearFirst: boolean
+): Promise<void> {
+  if (clearFirst) {
+    await db.prepare(`DELETE FROM reservation_equipment WHERE reservation_id = ?`).bind(reservationId).run();
+  }
+
+  const requested = Array.from(new Set(equipmentIds || []));
+  if (requested.length === 0) return;
+
+  const placeholders = requested.map(() => '?').join(',');
+  const known = await db
+    .prepare(`SELECT id FROM equipment WHERE is_active = 1 AND id IN (${placeholders})`)
+    .bind(...requested)
+    .all<any>();
+
+  const valid = (known.results || []).map((row: any) => row.id);
+  if (valid.length === 0) return;
+
+  await db.batch(
+    valid.map((eqId: string) =>
+      db
+        .prepare(`INSERT OR IGNORE INTO reservation_equipment (reservation_id, equipment_id) VALUES (?, ?)`)
+        .bind(reservationId, eqId)
+    )
+  );
 }
 
 /**
@@ -276,7 +344,10 @@ resApp.get('/', authMiddleware, async (c) => {
 // POST /api/reservations - Create reservation with atomic conflict check
 resApp.post('/', authMiddleware, async (c) => {
   const user = c.get('user')!;
-  const body = await c.req.json();
+  const body = await readJsonBody(c);
+  if (body === undefined) {
+    return c.json({ success: false, error: INVALID_JSON_ERROR }, 400);
+  }
   const parsed = reservationInputSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: parsed.error.issues[0].message }, 400);
@@ -293,6 +364,11 @@ resApp.post('/', authMiddleware, async (c) => {
 
   if (isPastSlot(date, startMin)) {
     return c.json({ success: false, error: PAST_CREATE_MESSAGE }, 400);
+  }
+
+  const roomError = await assertBookableRoom(c.env.DB, roomId);
+  if (roomError) {
+    return c.json({ success: false, error: roomError }, 400);
   }
 
   // Generate ID and insert
@@ -332,15 +408,8 @@ resApp.post('/', authMiddleware, async (c) => {
     return conflictResponse(c, await findConflict(c.env.DB, roomId, date, startMin, endMin), 'create');
   }
 
-  // Insert equipment relations
-  if (equipmentIds && equipmentIds.length > 0) {
-    for (const eqId of equipmentIds) {
-      await c.env.DB
-        .prepare(`INSERT OR IGNORE INTO reservation_equipment (reservation_id, equipment_id) VALUES (?, ?)`)
-        .bind(resId, eqId)
-        .run();
-    }
-  }
+  // Insert equipment relations, restricted to ids that actually exist and are active.
+  await replaceEquipmentLinks(c.env.DB, resId, equipmentIds, false);
 
   await writeAuditLog(c.env.DB, user.id, 'CREATE_RESERVATION', 'reservation', resId, null, { roomId, date, startTime, endTime, reason }, c.get('clientIp'));
 
@@ -383,7 +452,10 @@ resApp.post('/', authMiddleware, async (c) => {
 resApp.patch('/:id', authMiddleware, async (c) => {
   const user = c.get('user')!;
   const resId = c.req.param('id');
-  const body = await c.req.json();
+  const body = await readJsonBody(c);
+  if (body === undefined) {
+    return c.json({ success: false, error: INVALID_JSON_ERROR }, 400);
+  }
   const parsed = reservationInputSchema.partial().safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: parsed.error.issues[0].message }, 400);
@@ -430,6 +502,15 @@ resApp.patch('/:id', authMiddleware, async (c) => {
     return c.json({ success: false, error: PAST_CREATE_MESSAGE }, 400);
   }
 
+  // Only when the room is actually being moved: an existing booking whose room was
+  // deactivated afterwards must still be editable (and cancellable) by its owner.
+  if (data.roomId && data.roomId !== existing.room_id) {
+    const roomError = await assertBookableRoom(c.env.DB, roomId);
+    if (roomError) {
+      return c.json({ success: false, error: roomError }, 400);
+    }
+  }
+
   const nowStr = new Date().toISOString();
 
   // Same single-statement guard as POST: the overlap test rides along in the UPDATE's
@@ -470,10 +551,7 @@ resApp.patch('/:id', authMiddleware, async (c) => {
 
   // Update equipment relations if provided
   if (data.equipmentIds) {
-    await c.env.DB.prepare(`DELETE FROM reservation_equipment WHERE reservation_id = ?`).bind(resId).run();
-    for (const eqId of data.equipmentIds) {
-      await c.env.DB.prepare(`INSERT INTO reservation_equipment (reservation_id, equipment_id) VALUES (?, ?)`).bind(resId, eqId).run();
-    }
+    await replaceEquipmentLinks(c.env.DB, resId, data.equipmentIds, true);
   }
 
   await writeAuditLog(c.env.DB, user.id, 'UPDATE_RESERVATION', 'reservation', resId, existing, data, c.get('clientIp'));

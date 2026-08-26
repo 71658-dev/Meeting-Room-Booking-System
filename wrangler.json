@@ -28,9 +28,29 @@
   "vars": {
     "TURNSTILE_SITEKEY": "0x4AAAAAAEGpkZprlggOYtpb"
   },
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "PUBLIC_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1001",
+        "simple": { "limit": 20, "period": 10 }
+      }
+    ]
+  },
   "env": {
     "development": {
       "name": "meeting-room-booking-system-dev",
+      "unsafe": {
+        "bindings": [
+          {
+            "name": "PUBLIC_RATE_LIMITER",
+            "type": "ratelimit",
+            "namespace_id": "1001",
+            "simple": { "limit": 20, "period": 10 }
+          }
+        ]
+      },
       "kv_namespaces": [
         {
           "binding": "MEETING_DB",

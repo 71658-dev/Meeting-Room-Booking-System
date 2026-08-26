@@ -14,33 +14,87 @@ import { HonoEnv } from './types';
 const app = new Hono<HonoEnv>();
 
 // Security Headers Middleware
+//
+// `try/finally`, not a bare `await next()`: when a handler throws, the error unwinds past
+// this point and the response is built by `app.onError` below. Everything after a bare
+// `await next()` would simply never run, so every 500 went out with no CSP, no nosniff and
+// no HSTS — the one class of response an attacker can most easily provoke. Setting the
+// headers in `finally` puts them in Hono's prepared-header set, which is applied to
+// whatever response is constructed afterwards, error path included.
 app.use('*', async (c, next) => {
-  await next();
-  c.header('X-Content-Type-Options', 'nosniff');
-  c.header('X-Frame-Options', 'DENY');
-  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-  c.header('X-XSS-Protection', '1; mode=block');
-  // These two were in public/_headers but not here, so /api/* responses — the only ones
-  // that actually reach the Worker — went out without them. The two lists are supposed to
-  // be the same list; keep them that way.
-  c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-  c.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
-  // No 'unsafe-eval' and no 'unsafe-inline' in script-src: the Preact/Vite build needs
-  // neither, and removing them is the main CSP win the v2 rewrite was meant to deliver.
-  // style-src still allows 'unsafe-inline' because a few components set percentage
-  // widths via the style prop; that is a far weaker exposure and there is no innerHTML
-  // anywhere in the client.
-  c.header(
-    'Content-Security-Policy',
-    "default-src 'self'; " +
-      "script-src 'self' https://challenges.cloudflare.com; " +
-      "style-src 'self' 'unsafe-inline'; " +
-      "font-src 'self' data:; " +
-      "frame-src https://challenges.cloudflare.com; " +
-      "img-src 'self' data:; " +
-      "connect-src 'self' https://challenges.cloudflare.com; " +
-      "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
-  );
+  try {
+    await next();
+  } finally {
+    c.header('X-Content-Type-Options', 'nosniff');
+    c.header('X-Frame-Options', 'DENY');
+    c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    // Explicitly 0, not '1; mode=block'. The legacy XSS auditor is gone from every current
+    // browser, and in the ones that still honour it the filter is itself an attack surface
+    // (it can be steered into suppressing parts of a page). The CSP below is the control.
+    c.header('X-XSS-Protection', '0');
+    c.header('Cross-Origin-Opener-Policy', 'same-origin');
+    // These two were in public/_headers but not here, so /api/* responses — the only ones
+    // that actually reach the Worker — went out without them. The two lists are supposed to
+    // be the same list; keep them that way.
+    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+    c.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+    // No 'unsafe-eval' and no 'unsafe-inline' in script-src: the Preact/Vite build needs
+    // neither, and removing them is the main CSP win the v2 rewrite was meant to deliver.
+    // style-src still allows 'unsafe-inline' because a few components set percentage
+    // widths via the style prop; that is a far weaker exposure and there is no innerHTML
+    // anywhere in the client.
+    c.header(
+      'Content-Security-Policy',
+      "default-src 'self'; " +
+        "script-src 'self' https://challenges.cloudflare.com; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "font-src 'self' data:; " +
+        "frame-src https://challenges.cloudflare.com; " +
+        "img-src 'self' data:; " +
+        "connect-src 'self' https://challenges.cloudflare.com; " +
+        "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    );
+  }
+});
+
+// Nothing under /api/* may be stored by a cache.
+//
+// These responses carry 事由、備註、與會者信箱、姓名 and the whole user directory, and they
+// are authorised by a cookie rather than by anything in the URL. Without an explicit
+// directive a shared cache (or the browser's own back/forward store on a shared office
+// PC) is free to keep one user's answer and hand it to the next person at that desk.
+// The static bundle is deliberately left alone — it is public and fingerprinted.
+//
+// /api/public/* is the single exception, and it is an exception because it is the
+// opposite case in every respect: no cookie decides what it returns, and its payload is
+// the de-identified view an anonymous visitor sees anyway. Being cacheable is that
+// route's main defence against an anonymous flood — see routes/publicSchedule.ts — so
+// this must not overwrite the Cache-Control it sets for itself.
+app.use('/api/*', async (c, next) => {
+  const isPublic = new URL(c.req.url).pathname.startsWith('/api/public/');
+  try {
+    await next();
+  } finally {
+    if (!isPublic) {
+      c.header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      c.header('Pragma', 'no-cache');
+      c.header('Vary', 'Cookie');
+    }
+  }
+});
+
+/**
+ * One generic error response for every unhandled throw.
+ *
+ * Hono's built-in handler answers with a bare text body, and — more to the point — an
+ * exception thrown inside a route bypasses the JSON shape every client path expects, so a
+ * malformed request surfaced as an opaque failure the UI could not describe. The message
+ * is deliberately fixed: `err.message` here is as likely to be a D1 error naming a column
+ * as anything actionable, and that is schema disclosure. The detail goes to the log.
+ */
+app.onError((err, c) => {
+  console.error('Unhandled error:', err);
+  return c.json({ success: false, error: '伺服器發生非預期錯誤，請稍後再試' }, 500);
 });
 
 // Auto-migration & database bootstrap check.

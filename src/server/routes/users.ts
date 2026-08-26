@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { hashPasswordChain, generateRandomToken } from '../auth/crypto';
 import { revokeAllUserSessions } from '../auth/session';
 import { authMiddleware, requireRole } from '../middleware/auth';
+import { readJsonBody, INVALID_JSON_ERROR } from '../middleware/security';
 import { writeAuditLog } from '../middleware/audit';
 import { HonoEnv, Role } from '../types';
 
@@ -102,18 +103,45 @@ const optionalEmail = z
   // every partial update silently wipe the address.
   .transform((v) => (v === undefined ? undefined : v || null));
 
+/**
+ * Bounds on the identity fields.
+ *
+ * `id` is not just a column: it is concatenated into the KV lockout keys in
+ * auth/lockout.ts and the mail-quota key in services/email.ts, and it is written to
+ * `audit_log.actor_id`. Unbounded and unconstrained, an admin could mint an account whose
+ * id contains the key separator (`:`) and have it collide with another account's throttle
+ * bucket, or one long enough to push those keys past KV's 512-byte limit — at which point
+ * that user's every login attempt is a 500 rather than a login. Restricting it to the
+ * shape a 工號 actually takes removes the whole question.
+ *
+ * The same cap on the free-text fields matches the one reservations.ts puts on 事由/備註,
+ * for the same reason: these are stored and later interpolated into outbound mail.
+ */
+const MAX_ID_LENGTH = 64;
+const MAX_NAME_LENGTH = 100;
+const MAX_EXT_LENGTH = 20;
+
+const userIdField = z
+  .string()
+  .min(1, '請輸入工號/帳號')
+  .max(MAX_ID_LENGTH, `工號/帳號長度不得超過 ${MAX_ID_LENGTH} 個字元`)
+  .regex(/^[A-Za-z0-9._-]+$/, '工號/帳號僅能使用英數字與 . _ - 符號');
+
 const createUserSchema = z.object({
-  id: z.string().min(1, '請輸入工號/帳號'),
-  name: z.string().min(1, '請輸入同仁姓名'),
-  deptId: z.string().min(1, '請選擇所屬科室'),
-  ext: z.string().optional().nullable(),
+  id: userIdField,
+  name: z.string().min(1, '請輸入同仁姓名').max(MAX_NAME_LENGTH, `姓名長度不得超過 ${MAX_NAME_LENGTH} 個字元`),
+  deptId: z.string().min(1, '請選擇所屬科室').max(MAX_ID_LENGTH),
+  ext: z.string().max(MAX_EXT_LENGTH, `分機長度不得超過 ${MAX_EXT_LENGTH} 個字元`).optional().nullable(),
   email: optionalEmail,
   role: z.enum(['superadmin', 'admin', 'staff']).default('staff'),
 });
 
 usersApp.post('/', authMiddleware, requireRole('superadmin', 'admin'), async (c) => {
   const currentUser = c.get('user')!;
-  const body = await c.req.json();
+  const body = await readJsonBody(c);
+  if (body === undefined) {
+    return c.json({ success: false, error: INVALID_JSON_ERROR }, 400);
+  }
   const parsed = createUserSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: parsed.error.issues[0].message }, 400);
@@ -157,9 +185,9 @@ usersApp.post('/', authMiddleware, requireRole('superadmin', 'admin'), async (c)
 });
 
 const updateUserSchema = z.object({
-  name: z.string().min(1, '請輸入同仁姓名').optional(),
-  deptId: z.string().min(1, '請選擇科室').optional(),
-  ext: z.string().optional().nullable(),
+  name: z.string().min(1, '請輸入同仁姓名').max(MAX_NAME_LENGTH, `姓名長度不得超過 ${MAX_NAME_LENGTH} 個字元`).optional(),
+  deptId: z.string().min(1, '請選擇科室').max(MAX_ID_LENGTH).optional(),
+  ext: z.string().max(MAX_EXT_LENGTH, `分機長度不得超過 ${MAX_EXT_LENGTH} 個字元`).optional().nullable(),
   // Same rule as create. PATCH used to take a bare `z.string()`, so the one endpoint an
   // admin actually uses day to day was the one that would store a non-address.
   email: optionalEmail,
@@ -170,7 +198,10 @@ const updateUserSchema = z.object({
 usersApp.patch('/:id', authMiddleware, async (c) => {
   const currentUser = c.get('user')!;
   const targetId = c.req.param('id');
-  const body = await c.req.json();
+  const body = await readJsonBody(c);
+  if (body === undefined) {
+    return c.json({ success: false, error: INVALID_JSON_ERROR }, 400);
+  }
   const parsed = updateUserSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: parsed.error.issues[0].message }, 400);

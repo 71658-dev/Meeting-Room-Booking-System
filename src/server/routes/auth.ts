@@ -11,6 +11,7 @@ import {
 import { checkLockout, recordFailure, clearAccountFailures } from '../auth/lockout';
 import { validatePasswordPolicy, MIN_PASSWORD_LENGTH } from '../auth/passwordPolicy';
 import { authMiddleware } from '../middleware/auth';
+import { getClientIp, readJsonBody, INVALID_JSON_ERROR } from '../middleware/security';
 import { writeAuditLog } from '../middleware/audit';
 import { HonoEnv } from '../types';
 
@@ -56,21 +57,35 @@ async function verifyTurnstileToken(secretKey: string, token: string, remoteIp?:
 // with only `.min()`, an absent field falls back to Zod's English default.
 const requiredString = (message: string) => z.string({ error: message }).min(1, message);
 
+// Both fields are length-capped, and the cap is a control rather than tidiness.
+//
+// `id` is concatenated into the KV lockout key and written to audit_log.actor_id, so an
+// unbounded value let one request either blow past KV's 512-byte key limit (an
+// unauthenticated 500, on the endpoint that must stay up) or pad the audit table with
+// kilobytes per attempt. `password` is fed to a 6x100k PBKDF2 chain; the 200-character
+// ceiling matches auth/passwordPolicy.ts, which capped it there for the same reason and
+// was the only place the limit existed.
+const MAX_ID_LENGTH = 64;
+const MAX_LOGIN_PASSWORD_LENGTH = 200;
+
 const loginSchema = z.object({
-  id: requiredString('請輸入工號/帳號'),
-  password: requiredString('請輸入密碼'),
-  turnstileToken: z.string().optional(),
+  id: requiredString('請輸入工號/帳號').max(MAX_ID_LENGTH, '工號/帳號格式不正確'),
+  password: requiredString('請輸入密碼').max(MAX_LOGIN_PASSWORD_LENGTH, '密碼格式不正確'),
+  turnstileToken: z.string().max(4096).optional(),
 });
 
 authApp.post('/login', async (c) => {
-  const body = await c.req.json();
+  const body = await readJsonBody(c);
+  if (body === undefined) {
+    return c.json({ success: false, error: INVALID_JSON_ERROR }, 400);
+  }
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: parsed.error.issues[0].message }, 400);
   }
 
   const { id, password, turnstileToken } = parsed.data;
-  const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '127.0.0.1';
+  const clientIp = getClientIp(c);
 
   // Fail closed when the human-verification secret is not configured, rather than
   // letting logins through unchecked. This mirrors how SUPERADMIN_DEFAULT_PASSWORD
@@ -198,7 +213,12 @@ authApp.post('/login', async (c) => {
   const userAgent = c.req.header('user-agent') || undefined;
   const { token, expiresAt } = await createSession(c.env.DB, id, clientIp, userAgent);
 
-  // Set HttpOnly cookie
+  // Set HttpOnly cookie.
+  //
+  // These three attributes are what the `__Host-` prefix in the cookie's name requires:
+  // Secure, Path=/, and no Domain. A browser silently drops the cookie if any of them is
+  // missing, so changing them here breaks login rather than merely weakening it — see the
+  // note on SESSION_COOKIE_NAME for why the prefix is there.
   setCookie(c, SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: true,
@@ -239,7 +259,11 @@ authApp.post('/logout', authMiddleware, async (c) => {
   const session = c.get('session')!;
 
   await revokeSessionByHash(c.env.DB, session.token_hash);
-  deleteCookie(c, SESSION_COOKIE_NAME, { path: '/' });
+  // The deletion has to satisfy the `__Host-` rules too, or the browser rejects the
+  // Set-Cookie outright and the cookie stays put — logged out on the server, still
+  // present in the browser, and the user sees a confusing 401 loop instead of the
+  // login screen.
+  deleteCookie(c, SESSION_COOKIE_NAME, { path: '/', secure: true, sameSite: 'Strict' });
 
   await writeAuditLog(c.env.DB, user.id, 'LOGOUT', 'user', user.id, null, null, c.get('clientIp'));
 
@@ -259,7 +283,10 @@ const passwordSchema = z.object({
 
 authApp.post('/password', authMiddleware, async (c) => {
   const user = c.get('user')!;
-  const body = await c.req.json();
+  const body = await readJsonBody(c);
+  if (body === undefined) {
+    return c.json({ success: false, error: INVALID_JSON_ERROR }, 400);
+  }
   const parsed = passwordSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: parsed.error.issues[0].message }, 400);

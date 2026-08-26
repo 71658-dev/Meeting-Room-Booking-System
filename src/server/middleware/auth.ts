@@ -1,7 +1,7 @@
 import { MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { getSessionAndUser, SESSION_COOKIE_NAME } from '../auth/session';
-import { requirePasswordChangeComplete } from './security';
+import { requirePasswordChangeComplete, getClientIp } from './security';
 import { HonoEnv, Role } from '../types';
 
 export function extractToken(c: any): string | null {
@@ -31,7 +31,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
 
   c.set('user', result.user);
   c.set('session', result.session);
-  c.set('clientIp', c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '127.0.0.1');
+  c.set('clientIp', getClientIp(c));
 
   // Composed here rather than mounted per-route: every protected endpoint goes through
   // authMiddleware, so this is the one place the forced-change state cannot be skipped.
@@ -47,7 +47,7 @@ export const optionalAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next
       c.set('session', result.session);
     }
   }
-  c.set('clientIp', c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '127.0.0.1');
+  c.set('clientIp', getClientIp(c));
   await next();
 };
 

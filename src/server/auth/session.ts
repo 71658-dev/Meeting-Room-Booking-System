@@ -2,7 +2,29 @@ import { D1Database } from '@cloudflare/workers-types';
 import { generateRandomToken, sha256Hex } from './crypto';
 import { DBSession, DBUser, UserSafe } from '../types';
 
-export const SESSION_COOKIE_NAME = 'meeting_session';
+/**
+ * The session cookie, carrying the `__Host-` prefix.
+ *
+ * The prefix is not decoration: a browser refuses to store a `__Host-` cookie unless it
+ * is `Secure`, `Path=/`, and carries **no `Domain` attribute** — which means only the
+ * exact host that set it can ever write it. That closes cookie tossing, where a sibling
+ * host under a shared registrable domain sets a cookie for the parent and the browser
+ * then sends it here, indistinguishable from the real one. The session is authorised by
+ * value alone, so an attacker who can *write* this cookie can pin a victim onto a session
+ * of their choosing.
+ *
+ * On `*.workers.dev` that is currently blocked anyway, because workers.dev is on the
+ * Public Suffix List. It stops being blocked the moment this moves to a real
+ * `*.hccg.gov.tw` host, where every other agency system under that domain — and any XSS
+ * on any of them — becomes able to set cookies for the parent. The prefix costs nothing
+ * and holds in both places, so it should not wait for the migration that makes it matter.
+ *
+ * Renaming the cookie invalidates sessions issued under the old name: nothing reads
+ * `meeting_session` any more, so anyone holding one is treated as logged out and signs in
+ * again once. That is a one-off cost on the deploy, and the stale cookie — still HttpOnly,
+ * Secure and SameSite=Strict — is inert until it expires on its own within 8 hours.
+ */
+export const SESSION_COOKIE_NAME = '__Host-meeting_session';
 export const SESSION_TTL_SECONDS = 8 * 60 * 60; // 8 hours
 
 export async function createSession(

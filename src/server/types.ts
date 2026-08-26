@@ -1,9 +1,28 @@
 import { KVNamespace, D1Database, Fetcher } from '@cloudflare/workers-types';
 
+/**
+ * The Workers Rate Limiting binding.
+ *
+ * Not in @cloudflare/workers-types yet (it is still declared through `unsafe.bindings` in
+ * wrangler.json), so the shape is written out here. `limit()` is evaluated inside the
+ * isolate against a per-colo counter — no KV read, no D1 round-trip, and no cost, which
+ * is the whole reason it is used instead of a WAF rate-limiting rule.
+ */
+export interface RateLimiter {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 export interface Env {
   DB: D1Database;
   MEETING_DB: KVNamespace;
   ASSETS: Fetcher;
+  /**
+   * Optional on purpose. `unsafe.bindings` are not provided by every runtime that loads
+   * this Worker — the vitest pool and older local-dev setups among them — and a public
+   * read endpoint must not stop working because a throttle is unavailable. Absent, the
+   * limiter is skipped and the response cache below still does the heavy lifting.
+   */
+  PUBLIC_RATE_LIMITER?: RateLimiter;
   TURNSTILE_SECRET?: string;
   SUPERADMIN_DEFAULT_PASSWORD?: string;
   TURNSTILE_SITEKEY?: string;

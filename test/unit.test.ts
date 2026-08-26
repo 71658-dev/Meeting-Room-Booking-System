@@ -9,6 +9,7 @@ import { validatePasswordPolicy, MIN_PASSWORD_LENGTH } from '../src/server/auth/
 import { escapeHtml, isAllowedRecipient, parseRecipients } from '../src/server/services/email';
 import { redactSensitive } from '../src/server/middleware/audit';
 import { computeHourRange } from '../src/client/lib/timeline';
+import { escapeIcsText } from '../src/client/lib/ics';
 import {
   agencyToday,
   agencyMinutesNow,
@@ -329,5 +330,31 @@ describe('time string conversion', () => {
 
   it('treats an empty time as midnight rather than NaN', () => {
     expect(timeStrToMin('')).toBe(0);
+  });
+});
+
+describe('iCalendar text escaping', () => {
+  it('neutralises a newline so free text cannot open a new property', () => {
+    // A 事由 is free text. Unescaped, the CRLF here ends SUMMARY and everything after it
+    // is parsed as iCalendar — an ATTENDEE the booking never had, in a file the
+    // recipient's calendar imports without question.
+    const injected = '早會\r\nATTENDEE:mailto:attacker@example.com';
+    const escaped = escapeIcsText(injected);
+
+    expect(escaped).not.toContain('\r');
+    expect(escaped).not.toContain('\n');
+    expect(escaped).toBe('早會\\nATTENDEE:mailto:attacker@example.com');
+  });
+
+  it('escapes the separators of the TEXT grammar, backslash first', () => {
+    expect(escapeIcsText('a;b,c')).toBe('a\\;b\\,c');
+    // The backslash must be doubled before the others are introduced, or the escape
+    // sequences produced here would themselves be re-escaped.
+    expect(escapeIcsText('a\\b')).toBe('a\\\\b');
+  });
+
+  it('renders null and undefined as empty rather than as the words', () => {
+    expect(escapeIcsText(null)).toBe('');
+    expect(escapeIcsText(undefined)).toBe('');
   });
 });
