@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
+import { CalendarPlus, ChevronLeft, ChevronRight, Copy, Pencil, Plus, Search, X } from 'lucide-preact';
 import { api } from '../api';
 import {
   reservations,
@@ -18,7 +19,7 @@ import {
 } from '../state';
 import { Reservation } from '../types';
 import { generateAndDownloadIcs } from '../lib/ics';
-import { roomInk } from '../lib/roomInk';
+import { roomColor } from '../lib/roomColor';
 import { agencyToday, isPastDate, isPastSlot } from '../../shared/time';
 
 export function MonthView() {
@@ -227,241 +228,250 @@ export function MonthView() {
     .sort((a, b) => (a.date === b.date ? a.start_min - b.start_min : a.date.localeCompare(b.date)))
     .slice(0, 10);
 
+  const roomList = rooms.value;
+  const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+  // Three rooms still fit a segmented control beside the other filters; past that it
+  // turns into a dropdown like the department filter.
+  const roomsAsSegments = roomList.length > 0 && roomList.length <= 3;
+  const monthTitle = `${year} 年 ${month} 月`;
+
   return (
-    <div class="max-w-[1400px] mx-auto p-0 md:p-8 relative overflow-hidden min-h-[calc(100vh-5rem)]">
+    <div class="max-w-[1400px] mx-auto px-4 md:px-8 pt-2 md:pt-4 pb-8 relative min-h-[calc(100vh-88px)]">
       {/* The drawer overlays this block instead of reserving space next to it: reflowing
           the calendar grid on open shrank every cell and re-wrapped the entry text. */}
       <div>
-        {/* Mobile month bar */}
-        <div class="md:hidden px-4 pt-5">
-          <div class="flex items-center justify-between pb-3 border-b-2 border-[#201e1d]">
-            <div class="font-extrabold text-2xl leading-none text-[#201e1d]">
-              {year} / {month.toString().padStart(2, '0')}
-            </div>
-            <div class="flex gap-2">
-              <button
-                onClick={handlePrevMonth}
-                aria-label="上個月"
-                class="border border-[#201e1d] bg-white px-2.5 py-1.5 font-semibold text-[13px] leading-none cursor-pointer"
-              >
-                ◀
-              </button>
-              <button
-                onClick={handleToday}
-                class="border border-[#201e1d] bg-white px-2.5 py-1.5 font-semibold text-[13px] leading-none cursor-pointer"
-              >
-                今天
-              </button>
-              <button
-                onClick={handleNextMonth}
-                aria-label="下個月"
-                class="border border-[#201e1d] bg-white px-2.5 py-1.5 font-semibold text-[13px] leading-none cursor-pointer"
-              >
-                ▶
-              </button>
-            </div>
+        {/* Title + month navigation */}
+        <div class="flex items-end justify-between gap-4 mb-3 md:mb-4">
+          <div>
+            <div class="hidden md:block lg-eyebrow">月曆總覽</div>
+            <h1 class="m-0 lg-title-1">
+              <span class="hidden md:inline">{monthTitle}</span>
+              <span class="md:hidden">{month} 月</span>
+            </h1>
+          </div>
+          <div class="glass flex items-center gap-0.5 h-11 px-1 rounded-full">
+            <button type="button" onClick={handlePrevMonth} aria-label="上個月" class="btn bg-transparent text-accent w-9 h-9 p-0 hover:bg-fill">
+              <ChevronLeft size={20} strokeWidth={2.4} aria-hidden="true" />
+            </button>
+            <button type="button" onClick={handleToday} class="btn bg-transparent text-accent h-9 px-3 text-[15px] hover:bg-fill">
+              今天
+            </button>
+            <button type="button" onClick={handleNextMonth} aria-label="下個月" class="btn bg-transparent text-accent w-9 h-9 p-0 hover:bg-fill">
+              <ChevronRight size={20} strokeWidth={2.4} aria-hidden="true" />
+            </button>
           </div>
         </div>
 
-        {/* Header Bar — desktop */}
-        <div class="hidden md:block bg-[#f3f2f2] p-6 mcard mb-6 border border-[#201e1d]">
-          <div class="flex flex-col md:flex-row items-start md:items-end justify-between gap-4 pb-4 border-b-2 border-[#201e1d]">
-            <div>
-              <div class="mono-label">MONTH · 月曆總覽</div>
-              <div class="font-extrabold text-4xl sm:text-5xl leading-none tracking-tight mt-2 text-[#201e1d]">
-                {year} / {month.toString().padStart(2, '0')}
-              </div>
-            </div>
-            <div class="flex flex-wrap items-center gap-3">
-              <button
-                onClick={handlePrevMonth}
-                class="border border-[#201e1d] bg-white px-3.5 py-2 font-semibold text-sm hover:bg-[#eae9e9] cursor-pointer"
-              >
-                ◀ 上個月
-              </button>
-              <button
-                onClick={handleToday}
-                class="border border-[#201e1d] bg-white px-3.5 py-2 font-semibold text-sm hover:bg-[#eae9e9] cursor-pointer"
-              >
-                今天
-              </button>
-              <button
-                onClick={handleNextMonth}
-                class="border border-[#201e1d] bg-white px-3.5 py-2 font-semibold text-sm hover:bg-[#eae9e9] cursor-pointer"
-              >
-                下個月 ▶
-              </button>
-              {currentUser.value && (
-                <button
-                  onClick={() => handleOpenAddModal()}
-                  class="bg-[#9e3526] text-white px-4 py-2 font-bold text-sm hover:bg-[#71261b] cursor-pointer"
-                >
-                  ＋ 新增預約
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Filter Bar */}
-          <div class="flex flex-wrap items-center gap-3 mt-4 text-sm">
-            <select
-              value={selectedRoomFilter.value}
-              onChange={(e) => (selectedRoomFilter.value = (e.target as HTMLSelectElement).value)}
-              class="border border-[#201e1d] bg-white px-3.5 py-2 font-medium text-xs sm:text-sm text-[#201e1d] outline-none"
-            >
-              <option value="">全部會議室 ({rooms.value.length} 間) ▾</option>
-              {rooms.value.map((rm) => (
-                <option key={rm.id} value={rm.id}>
-                  {rm.name} ({rm.capacity}人)
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={selectedDeptFilter.value}
-              onChange={(e) => (selectedDeptFilter.value = (e.target as HTMLSelectElement).value)}
-              class="border border-[#201e1d] bg-white px-3.5 py-2 font-medium text-xs sm:text-sm text-[#201e1d] outline-none"
-            >
-              <option value="">全部科室 ▾</option>
-              {departments.value.map((d) => (
-                <option key={d.id} value={d.name}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-
+        {/* Filter row — desktop */}
+        <div class="hidden md:flex flex-wrap items-center gap-2.5 mb-4">
+          <label class="glass-input flex items-center gap-2 w-[280px] cursor-text">
+            <Search size={17} class="flex-none text-label-2" aria-hidden="true" />
+            <span class="sr-only">搜尋</span>
             <input
-              type="text"
-              placeholder="🔍 搜尋事由 / 同仁 / 會議室"
+              type="search"
+              placeholder="搜尋事由 / 同仁 / 會議室"
               value={searchQuery.value}
               onInput={(e) => (searchQuery.value = (e.target as HTMLInputElement).value)}
-              class="border border-[#201e1d] bg-white px-3.5 py-2 font-normal text-xs sm:text-sm text-[#201e1d] w-56 outline-none"
+              class="flex-1 min-w-0 bg-transparent border-none outline-none text-[15px] placeholder:text-label-2"
             />
+          </label>
 
-            {currentUser.value && (
-              <label class="flex items-center gap-2 border border-[#201e1d] bg-white px-3.5 py-2 font-bold text-xs sm:text-sm cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={onlyMineFilter.value}
-                  onChange={(e) => (onlyMineFilter.value = (e.target as HTMLInputElement).checked)}
-                  class="w-4 h-4 accent-[#9e3526]"
-                />
-                僅我的預約
-              </label>
-            )}
-          </div>
-        </div>
-
-        {/* Days of Week Header. The English abbreviations are dropped below md — at a
-            seventh of a phone's width they wrap onto a second line. */}
-        <div class="grid grid-cols-7 mt-3 md:mt-0 mx-4 md:mx-0 bg-[#444141] text-white font-bold text-[11px] md:text-sm md:tracking-wider md:uppercase text-center md:text-left">
-          {['日', '一', '二', '三', '四', '五', '六'].map((zh, i) => (
-            <div
-              key={zh}
-              class={`py-2 md:p-3 ${i < 6 ? 'border-r border-[#201e1d]/40' : ''}`}
-            >
-              <span class="hidden md:inline">
-                {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][i]}{' '}
-              </span>
-              {zh}
+          {roomsAsSegments ? (
+            <div class="segmented h-10" role="group" aria-label="會議室篩選">
+              <button type="button" aria-pressed={!selectedRoomFilter.value} onClick={() => (selectedRoomFilter.value = '')}>
+                全部會議室
+              </button>
+              {roomList.map((rm) => (
+                <button
+                  key={rm.id}
+                  type="button"
+                  aria-pressed={selectedRoomFilter.value === rm.id}
+                  onClick={() => (selectedRoomFilter.value = rm.id)}
+                >
+                  {rm.name}
+                </button>
+              ))}
             </div>
-          ))}
+          ) : (
+            <select
+              aria-label="會議室篩選"
+              value={selectedRoomFilter.value}
+              onChange={(e) => (selectedRoomFilter.value = (e.target as HTMLSelectElement).value)}
+              class={`glass-select ${selectedRoomFilter.value ? 'is-set' : ''}`}
+            >
+              <option value="">全部會議室（{roomList.length} 間）</option>
+              {roomList.map((rm) => (
+                <option key={rm.id} value={rm.id}>
+                  {rm.name}（{rm.capacity} 人）
+                </option>
+              ))}
+            </select>
+          )}
+
+          <select
+            aria-label="科室篩選"
+            value={selectedDeptFilter.value}
+            onChange={(e) => (selectedDeptFilter.value = (e.target as HTMLSelectElement).value)}
+            class={`glass-select ${selectedDeptFilter.value ? 'is-set' : ''}`}
+          >
+            <option value="">全部科室</option>
+            {departments.value.map((d) => (
+              <option key={d.id} value={d.name}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+
+          {currentUser.value && (
+            <div class="glass-input flex items-center gap-2.5 pr-1.5 font-medium">
+              <span id="month-only-mine">僅我的預約</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={onlyMineFilter.value}
+                aria-labelledby="month-only-mine"
+                onClick={() => (onlyMineFilter.value = !onlyMineFilter.value)}
+                class="switch"
+              ></button>
+            </div>
+          )}
+
+          <div class="flex-1"></div>
+
+          {roomList.length > 0 && (
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-label-2">
+              {roomList.map((rm) => (
+                <span key={rm.id} class="inline-flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full" style={{ background: roomColor(rm.color_key).color }}></span>
+                  {rm.name}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Calendar Grid */}
-        <div class="grid grid-cols-7 mx-4 md:mx-0 border-l border-[#201e1d]/20 bg-[#dedbd5]">
-          {calendarDays.map((day) => {
-            const dayResList = resByDate[day.dateStr] || [];
-            const isToday = day.dateStr === todayStr;
-            const isSelected = isDatePanelOpen.value && day.dateStr === panelSelectedDate.value;
-
-            return (
+        {/* Calendar */}
+        <div class="surface rounded-[24px] md:rounded-[28px] overflow-hidden px-1.5 pt-2.5 md:pt-3.5 pb-1.5">
+          <div class="grid grid-cols-7 pb-1 md:pb-2">
+            {WEEKDAYS.map((zh, i) => (
               <div
-                key={day.dateStr}
-                onClick={() => handleCellClick(day.dateStr)}
-                class={`mcell min-h-[46px] md:min-h-[138px] pt-1.5 px-0 pb-1 md:p-3 flex flex-col items-center md:items-stretch gap-1 md:gap-2 cursor-pointer border-r border-b md:border-b-2 border-[#201e1d]/20 select-none ${
-                  !day.isCurrentMonth
-                    ? 'bg-[#eae9e9]'
-                    : isSelected
-                    ? 'bg-[#ffffff] md:ring-2 md:ring-inset md:ring-[#9e3526]'
-                    : isToday
-                    ? 'bg-[#fff2ef]'
-                    : 'bg-[#f3f2f2]'
+                key={zh}
+                class={`text-center md:text-left md:px-3.5 text-[11px] md:text-[13px] font-semibold ${
+                  i === 0 || i === 6 ? 'text-[rgba(60,60,67,.45)]' : 'text-label-2'
                 }`}
               >
-                <div class="flex flex-col md:flex-row items-center md:items-baseline md:justify-between gap-1 md:gap-0 w-full">
-                  <span
-                    class={`font-bold md:font-extrabold text-sm md:text-3xl leading-none ${
-                      !day.isCurrentMonth
-                        ? 'text-[#bab6b6]'
-                        : isToday
-                        ? 'text-[#9e3526]'
-                        : 'text-[#201e1d]'
+                <span class="hidden md:inline">週</span>
+                {zh}
+              </div>
+            ))}
+          </div>
+
+          <div class="grid grid-cols-7">
+            {calendarDays.map((day, i) => {
+              const dayResList = resByDate[day.dateStr] || [];
+              const isToday = day.dateStr === todayStr;
+              const isSelected = isDatePanelOpen.value && day.dateStr === panelSelectedDate.value;
+              const isWeekend = i % 7 === 0 || i % 7 === 6;
+
+              // Phone: the selected day takes the blue disc and today keeps red text.
+              // Desktop: today takes the red disc and selection is the cell's blue ring.
+              const numClass = isSelected
+                ? `max-md:bg-accent max-md:text-white ${isToday ? 'md:bg-danger md:text-white' : 'md:text-black'}`
+                : isToday
+                ? 'text-danger md:bg-danger md:text-white'
+                : !day.isCurrentMonth
+                ? 'text-label-3'
+                : isWeekend
+                ? 'text-black md:text-label-2'
+                : 'text-black';
+
+              return (
+                <div key={day.dateStr} class="md:p-[3px] md:border-t-[0.5px] md:border-black/[.08]">
+                  <button
+                    type="button"
+                    onClick={() => handleCellClick(day.dateStr)}
+                    aria-label={`${day.dateStr}${dayResList.length ? `，${dayResList.length} 筆預約` : ''}`}
+                    aria-pressed={isSelected}
+                    class={`w-full h-[46px] md:h-[140px] p-0 md:p-2 flex flex-col items-center md:items-stretch justify-center md:justify-start gap-[3px] md:gap-1 border-none rounded-2xl text-left overflow-hidden cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-transparent md:bg-accent/[.07] md:shadow-[inset_0_0_0_2px_#0088ff]'
+                        : 'bg-transparent md:hover:bg-fill-2'
                     }`}
                   >
-                    {day.dayNum}
-                  </span>
-                  {dayResList.length > 0 && (
-                    <>
-                      {/* Presence dot on a phone, count on desktop. */}
+                    <span class="flex items-center justify-between md:w-full">
                       <span
-                        aria-label={`${dayResList.length} 筆預約`}
-                        class="md:hidden w-[5px] h-[5px] bg-[#9e3526] inline-block"
-                      ></span>
-                      <span class="hidden md:inline font-bold text-xs text-[#605d5d]">
-                        {dayResList.length} 筆
+                        class={`w-8 h-8 md:w-[30px] md:h-[30px] rounded-full flex items-center justify-center text-[17px] tabular-nums ${
+                          isToday || isSelected ? 'font-semibold' : 'font-normal'
+                        } ${numClass}`}
+                      >
+                        {day.dayNum}
                       </span>
-                    </>
-                  )}
-                </div>
+                      {dayResList.length > 1 && (
+                        <span class="hidden md:inline text-xs text-label-2">{dayResList.length} 筆</span>
+                      )}
+                    </span>
 
-                <div class="hidden md:flex flex-col gap-1.5 overflow-hidden">
-                  {dayResList.map((r) => (
-                    <div
-                      key={r.id}
-                      class="border-t border-[#201e1d]/20 pt-1 text-left overflow-hidden"
-                    >
-                      <div class="font-bold text-xs sm:text-sm text-[#201e1d] truncate">
-                        {r.reason}
-                      </div>
-                      <div class="font-normal text-[11px] sm:text-xs text-[#605d5d] truncate">
-                        {r.start_time}–{r.end_time} · {r.room_name}
-                      </div>
-                    </div>
-                  ))}
+                    {/* Presence dot on a phone, entry chips on desktop. */}
+                    <span
+                      aria-hidden="true"
+                      class={`md:hidden w-[5px] h-[5px] rounded-full ${dayResList.length ? 'bg-[rgba(60,60,67,.35)]' : 'bg-transparent'}`}
+                    ></span>
+
+                    {dayResList.slice(0, MAX_CHIPS).map((r) => {
+                      const c = roomColor(r.room_color);
+                      return (
+                        <span key={r.id} class="hidden md:block flex-none px-2 py-[3px] rounded-[9px] overflow-hidden" style={{ background: c.tint }}>
+                          <span class="block text-xs leading-[15px] font-semibold text-black truncate">{r.reason}</span>
+                          <span class="flex items-center gap-1 text-[11px] leading-[13px] text-label-2 whitespace-nowrap overflow-hidden">
+                            <span class="w-1.5 h-1.5 rounded-full flex-none" style={{ background: c.color }}></span>
+                            <span class="truncate">
+                              {r.start_time} · {r.room_name}
+                            </span>
+                          </span>
+                        </span>
+                      );
+                    })}
+                    {dayResList.length > MAX_CHIPS && (
+                      <span class="hidden md:block px-2 text-[11px] font-semibold text-label-2">
+                        還有 {dayResList.length - MAX_CHIPS} 筆
+                      </span>
+                    )}
+                  </button>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
         {/* 近期預約 — 手機版 only */}
-        <div class="md:hidden px-4 mt-6 pb-8">
-          <div class="mono-label text-xs mb-2.5 normal-case">近期預約</div>
+        <div class="md:hidden">
+          <h2 class="m-0 mt-5 mb-2 mx-1 text-xl leading-[25px] font-semibold">近期預約</h2>
           {upcoming.length === 0 ? (
-            <div class="font-normal text-sm text-[#7d7979] py-2">本月尚無即將到來的預約</div>
+            <div class="surface rounded-[24px] px-4 py-5 text-[15px] text-label-2">本月尚無即將到來的預約</div>
           ) : (
-            <div class="flex flex-col gap-3.5">
-              {upcoming.map((r) => {
-                const room = rooms.value.find((rm) => rm.id === r.room_id);
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => handleCellClick(r.date)}
-                    style={{ borderLeftColor: roomInk(room?.color_key) }}
-                    class="text-left w-full bg-transparent border-none border-l-[3px] border-solid pl-2.5 cursor-pointer"
-                  >
-                    <div class="font-bold text-[13px] leading-tight text-[#7d7979]">
-                      {r.date.slice(5).replace('-', '/')} · {r.start_time}–{r.end_time}
-                    </div>
-                    <div class="font-bold text-base leading-snug text-[#201e1d]">{r.reason}</div>
-                    <div class="font-normal text-[13px] leading-normal text-[#605d5d]">
+            <div class="surface rounded-[24px] overflow-hidden">
+              {upcoming.map((r, idx) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => handleCellClick(r.date)}
+                  class={`w-full flex gap-3 px-4 py-3 bg-transparent border-none text-left cursor-pointer ${
+                    idx > 0 ? 'shadow-[inset_0_.5px_0_rgba(0,0,0,.08)]' : ''
+                  }`}
+                >
+                  <span class="w-[42px] flex-none text-right">
+                    <span class="block text-[15px] font-semibold tabular-nums">{r.start_time}</span>
+                    <span class="block text-xs text-label-2 tabular-nums">{shortDate(r.date)}</span>
+                  </span>
+                  <span class="w-1 rounded-sm flex-none" style={{ background: roomColor(r.room_color).color }}></span>
+                  <span class="min-w-0">
+                    <span class="block text-[17px] leading-[22px] font-semibold truncate">{r.reason}</span>
+                    <span class="block text-[13px] text-label-2 truncate">
                       {r.room_name} · {r.dept_name} {r.user_name}
-                    </div>
-                  </button>
-                );
-              })}
+                    </span>
+                  </span>
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -472,123 +482,111 @@ export function MonthView() {
       <div
         onClick={() => (isDatePanelOpen.value = false)}
         aria-hidden="true"
-        class={`fixed lg:absolute inset-0 bg-[#201e1d] z-20 transition-opacity duration-300 ${
-          isDatePanelOpen.value ? 'opacity-20' : 'opacity-0 pointer-events-none'
+        class={`hidden md:block absolute inset-0 z-20 transition-opacity duration-300 ${
+          isDatePanelOpen.value ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       ></div>
 
-      {/* Right Slide-in Info Drawer (1e / 2a style) */}
-      {/* On a phone this is a whole screen rather than a drawer — it starts below the
-          56px ink bar so the hamburger and ＋ stay reachable. */}
-      <div
-        class={`fixed lg:absolute top-14 md:top-0 right-0 bottom-0 w-full md:w-[360px] bg-[#f3f2f2] md:border-l-2 md:border-[#201e1d] shadow-2xl z-30 p-5 md:p-6 overflow-y-auto transition-transform duration-300 ease-in-out ${
-          isDatePanelOpen.value ? 'translate-x-0' : 'translate-x-full'
+      {/* Day drawer (D2). A floating glass panel over the calendar on desktop; on a phone
+          a screen of its own, under the tab bar so the tabs and ＋ stay reachable. */}
+      <aside
+        aria-label="選定日期的預約"
+        aria-hidden={!isDatePanelOpen.value}
+        class={`fixed md:absolute inset-0 md:inset-auto md:top-2 md:right-4 md:h-[calc(100vh-112px)] md:max-h-[calc(100%-24px)] md:w-[380px] z-30 max-md:bg-[#f2f2f7] md:glass-sheet md:rounded-[32px] p-5 pt-6 pb-32 md:pb-5 flex flex-col gap-4 overflow-y-auto transition-[translate,opacity] duration-300 ease-out ${
+          isDatePanelOpen.value
+            ? 'translate-x-0 opacity-100'
+            : 'translate-x-full md:translate-x-[calc(100%+16px)] opacity-0 pointer-events-none'
         }`}
       >
-        <button
-          type="button"
-          onClick={() => (isDatePanelOpen.value = false)}
-          class="md:hidden bg-transparent border-none p-0 mb-4 font-semibold text-sm text-[#605d5d] cursor-pointer"
-        >
-          ← 返回月曆
-        </button>
-
-        <div class="flex items-center justify-between">
-          <div class="mono-label">選定日期</div>
-          <span
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-[13px] font-semibold text-accent">{dateMeta.subtitle}</div>
+            <div class="text-[28px] leading-[34px] font-bold">{dateMeta.title}</div>
+          </div>
+          <button
+            type="button"
             onClick={() => (isDatePanelOpen.value = false)}
-            class="hidden md:inline font-bold text-xl cursor-pointer text-[#605d5d] hover:text-[#201e1d]"
+            aria-label="關閉"
+            class="btn btn-plain btn-icon w-9 h-9 text-label-2"
           >
-            ✕
-          </span>
+            <X size={18} strokeWidth={2.4} aria-hidden="true" />
+          </button>
         </div>
 
-        <div class="font-extrabold text-3xl leading-tight mt-2.5 mb-1 text-[#201e1d]">
-          {dateMeta ? dateMeta.title : ''}
-        </div>
-        <div class="font-medium text-sm text-[#605d5d]">
-          {dateMeta ? dateMeta.subtitle : ''}
-        </div>
-
-        <div class="h-0.5 bg-[#201e1d] my-5"></div>
-
-        <div class="flex flex-col gap-4">
-          {selectedDateRes.length > 0 ? (
-            selectedDateRes.map((r) => (
-              <div key={r.id} class="border-l-4 border-[#201e1d] pl-3 py-1">
-                <div class="font-bold text-base sm:text-lg text-[#201e1d]">{r.reason}</div>
-                <div class="font-medium text-sm text-[#444141] mt-0.5">
-                  {r.start_time} – {r.end_time} · {r.room_name}
+        {selectedDateRes.length > 0 ? (
+          selectedDateRes.map((r) => {
+            const canManage = !!currentUser.value && r.can_manage === true;
+            return (
+              <div key={r.id} class="rounded-[20px] bg-white/85 px-4 py-3.5 flex flex-col gap-1.5">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full flex-none" style={{ background: roomColor(r.room_color).color }}></span>
+                  <span class="text-[13px] font-semibold text-label-2">
+                    {r.start_time} – {r.end_time} · {r.room_name}
+                  </span>
                 </div>
-                <div class="font-normal text-xs sm:text-sm text-[#605d5d] mt-0.5">
-                  {r.dept_name} {r.user_name} {r.headcount ? `· ${r.headcount} 人` : ''}
-                </div>
-                <div class="font-normal text-xs text-[#7d7979] mt-0.5">
+                <div class="text-[17px] leading-[22px] font-semibold">{r.reason}</div>
+                <div class="text-[13px] leading-[18px] text-label-2">
+                  {r.dept_name} {r.user_name}
+                  {r.headcount ? ` · ${r.headcount} 人` : ''}
+                  <br />
                   帳號 {r.user_id} · 分機 {r.user_ext || '—'}
                 </div>
-                <div class="flex flex-wrap gap-2 mt-2.5">
+                <div class="flex flex-wrap gap-1.5 mt-1.5">
                   {/* 編輯 disappears once the booking has begun; 取消 stays, because a
                       meeting that did not happen still has to be struck from the record. */}
-                  {currentUser.value && r.can_manage === true && !isPastSlot(r.date, r.start_min) && (
-                    <button
-                      onClick={(e) => handleEditReservation(e, r)}
-                      class="border border-[#201e1d] bg-white px-2.5 py-1 text-xs font-semibold hover:bg-[#eae9e9] cursor-pointer"
-                    >
+                  {canManage && !isPastSlot(r.date, r.start_min) && (
+                    <button type="button" onClick={(e) => handleEditReservation(e, r)} class="btn btn-tinted btn-sm gap-1">
+                      <Pencil size={13} strokeWidth={2.4} aria-hidden="true" />
                       編輯
                     </button>
                   )}
-                  {currentUser.value && r.can_manage === true && (
-                    <button
-                      onClick={() => handleCancelReservation(r)}
-                      class="bg-[#9e3526] hover:bg-[#71261b] text-white px-2.5 py-1 text-xs font-semibold border-none cursor-pointer"
-                    >
+                  <button type="button" onClick={() => handleCopyInfo(r)} class="btn btn-tinted btn-sm gap-1">
+                    <Copy size={13} strokeWidth={2.4} aria-hidden="true" />
+                    複製
+                  </button>
+                  <button type="button" onClick={() => generateAndDownloadIcs(r)} class="btn btn-tinted btn-sm gap-1">
+                    <CalendarPlus size={13} strokeWidth={2.4} aria-hidden="true" />
+                    .ics
+                  </button>
+                  {canManage && (
+                    <button type="button" onClick={() => handleCancelReservation(r)} class="btn btn-tinted btn-sm text-danger">
                       取消預約
                     </button>
                   )}
-                  <button
-                    onClick={() => handleCopyInfo(r)}
-                    class="border border-[#201e1d] bg-white px-2.5 py-1 text-xs font-semibold hover:bg-[#eae9e9] cursor-pointer"
-                  >
-                    複製資訊
-                  </button>
-                  <button
-                    onClick={() => generateAndDownloadIcs(r)}
-                    class="border border-[#201e1d] bg-white px-2.5 py-1 text-xs font-semibold hover:bg-[#eae9e9] cursor-pointer"
-                  >
-                    .ics 行事曆
-                  </button>
                 </div>
               </div>
-            ))
-          ) : (
-            <div class="font-normal text-sm text-[#7d7979] py-4">
-              本日尚無預約紀錄
-            </div>
-          )}
-        </div>
+            );
+          })
+        ) : (
+          <div class="rounded-[20px] bg-white/60 px-4 py-6 text-center text-[15px] text-label-2">本日尚無預約紀錄</div>
+        )}
 
-        <div class="h-px bg-[#d7d3d3] my-6"></div>
+        <div class="flex-1"></div>
 
         {isPastDate(panelSelectedDate.value) ? (
-          <div class="border border-[#d7d3d3] bg-[#eae9e9] p-3.5 font-medium text-sm text-[#605d5d]">
+          <div class="rounded-2xl bg-fill px-4 py-3.5 text-[15px] text-label-2">
             此日期已過去，僅供查詢；如需異動請取消該筆預約。
           </div>
         ) : currentUser.value ? (
-          <button
-            onClick={() => handleOpenAddModal(panelSelectedDate.value)}
-            class="w-full bg-[#9e3526] hover:bg-[#71261b] text-white p-3.5 font-bold text-base border-none cursor-pointer text-left transition-colors"
-          >
-            ＋ 於此日新增預約
+          <button type="button" onClick={() => handleOpenAddModal(panelSelectedDate.value)} class="btn btn-primary btn-lg w-full flex-none">
+            <Plus size={19} strokeWidth={2.4} aria-hidden="true" />
+            於此日新增預約
           </button>
         ) : (
-          <button
-            onClick={() => showToast('請先登入系統後再發起預約', 'error')}
-            class="w-full border border-[#201e1d] bg-white text-[#201e1d] p-3.5 font-semibold text-sm cursor-pointer text-left"
-          >
+          <button type="button" onClick={() => showToast('請先登入系統後再發起預約', 'error')} class="btn btn-tinted btn-lg w-full flex-none">
             登入後發起預約
           </button>
         )}
-      </div>
+      </aside>
     </div>
   );
+}
+
+// Two chips plus the 還有 N 筆 line is what a 140px cell holds without clipping.
+const MAX_CHIPS = 2;
+
+/** `2026-10-07` → `10/7` */
+function shortDate(dateStr: string): string {
+  const [, m, d] = dateStr.split('-').map(Number);
+  return `${m}/${d}`;
 }

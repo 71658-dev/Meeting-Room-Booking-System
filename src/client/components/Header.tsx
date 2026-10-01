@@ -1,32 +1,21 @@
+import { Plus } from 'lucide-preact';
 import {
   currentUser,
   currentView,
   isReservationModalOpen,
   editingReservation,
-  isPasswordModalOpen,
-  isProfileModalOpen,
+  isAccountSheetOpen,
   showToast,
 } from '../state';
-import { api } from '../api';
+import { navItemsFor, roleLabel, avatarInitial } from './navItems';
 
 /**
- * Desktop chrome. Below `md` this is replaced wholesale by MobileNav's ink bar and
- * drawer — see 手機版.dc.html.
+ * Desktop chrome (Glass Header): three floating glass pills — brand, nav, account.
+ * Below `md` this is replaced by MobileNav's tab bar.
  */
 export function Header() {
   const user = currentUser.value;
   const activeView = currentView.value;
-
-  const handleLogout = async () => {
-    try {
-      await api.logout();
-      showToast('已安全登出', 'success');
-    } catch (e) {
-      // Drop the local session either way — see MobileNav.handleLogout.
-    }
-    currentUser.value = null;
-    currentView.value = 'public';
-  };
 
   const handleOpenNewReservation = () => {
     if (!user) {
@@ -37,122 +26,84 @@ export function Header() {
     isReservationModalOpen.value = true;
   };
 
-  const navItems = [
-    { key: 'month', label: '月曆總覽' },
-    { key: 'timeline', label: '時段對照' },
-    { key: 'list', label: '預約清單' },
-    { key: 'stats', label: '使用統計' },
-  ];
-
-  if (user && (user.role === 'admin' || user.role === 'superadmin')) {
-    navItems.push({ key: 'admin', label: '後台管理' });
-  }
-
-  if (!user) {
-    navItems.push({ key: 'public', label: '公開排程' });
-  }
-
   return (
-    <header class="hidden md:block sticky top-0 z-40 bg-[#f3f2f2] border-b-2 border-[#201e1d]">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-[72px]">
-          {/* Logo & Title */}
-          <div
-            class="flex items-center gap-4 cursor-pointer"
-            onClick={() => (currentView.value = user ? 'month' : 'public')}
-          >
-            <div class="w-10 h-10 bg-[#9e3526] text-white font-extrabold text-xl flex items-center justify-center flex-none">
-              衛
-            </div>
-            <div>
-              <div class="font-extrabold text-base sm:text-lg leading-tight text-[#201e1d]">
-                新竹市衛生局 會議室預約系統
-              </div>
-              <div class="font-medium text-xs text-[#605d5d]">v2.0 公務版</div>
-            </div>
-          </div>
+    <header class="hidden md:block sticky top-0 z-40">
+      <div class="max-w-[1400px] mx-auto flex items-center justify-between gap-4 px-6 py-4">
+        {/* Brand */}
+        <button
+          type="button"
+          onClick={() => (currentView.value = user ? 'month' : 'public')}
+          class="glass flex items-center gap-3 h-14 pl-2 pr-5 rounded-full border-none cursor-pointer flex-none text-left"
+        >
+          <span class="w-10 h-10 rounded-xl bg-accent text-white font-bold text-[19px] flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,.35)]">
+            衛
+          </span>
+          <span class="flex flex-col">
+            <span class="font-semibold text-[15px] leading-5 text-black">
+              新竹市衛生局 會議室預約
+            </span>
+            <span class="text-xs leading-4 text-label-2">v2.0 公務版</span>
+          </span>
+        </button>
 
-          {/* Navigation Views */}
-          <nav class="flex items-center gap-0">
-            {navItems.map((item) => {
-              const isActive = activeView === item.key;
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => (currentView.value = item.key as any)}
-                  class={`px-4 py-3 text-sm transition-colors cursor-pointer border-none ${
-                    isActive
-                      ? 'bg-[#201e1d] text-white font-bold'
-                      : 'bg-transparent text-[#444141] font-medium hover:bg-[#eae9e9]'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* User Controls & Reservation Action */}
-          <div class="flex items-center gap-3 flex-none">
-            {user ? (
-              <>
-                <button
-                  onClick={handleOpenNewReservation}
-                  class="bg-[#9e3526] hover:bg-[#71261b] text-white px-4 py-2.5 font-bold text-sm cursor-pointer border-none transition-colors"
-                >
-                  ＋ 新增預約
-                </button>
-
-                <div class="flex items-center gap-2.5 border border-[#201e1d] px-3 py-1.5 bg-white">
-                  <div
-                    class="text-left cursor-pointer"
-                    onClick={() => (isProfileModalOpen.value = true)}
-                  >
-                    <div class="font-bold text-sm text-[#201e1d] flex items-center gap-1.5">
-                      {user.name}
-                      <span class="font-semibold text-[11px] bg-[#201e1d] text-white px-1.5 py-0.5">
-                        {user.role === 'superadmin' ? '超管' : user.role === 'admin' ? '管理員' : '同仁'}
-                      </span>
-                    </div>
-                    <div class="font-normal text-xs text-[#605d5d]">
-                      {user.dept_name || user.dept_id}
-                    </div>
-                  </div>
-
-                  <span
-                    onClick={() => (isProfileModalOpen.value = true)}
-                    class="font-semibold text-xs border-l border-[#d7d3d3] pl-2.5 text-[#9e3526] cursor-pointer hover:underline"
-                    title="編輯個人資料"
-                  >
-                    編輯資料
-                  </span>
-
-                  <span
-                    onClick={() => (isPasswordModalOpen.value = true)}
-                    class="font-semibold text-xs border-l border-[#d7d3d3] pl-2 text-[#444141] cursor-pointer hover:underline"
-                    title="變更密碼"
-                  >
-                    改密碼
-                  </span>
-
-                  <span
-                    onClick={handleLogout}
-                    class="font-semibold text-xs border-l border-[#d7d3d3] pl-2 text-[#605d5d] cursor-pointer hover:text-[#9e3526]"
-                    title="登出"
-                  >
-                    登出
-                  </span>
-                </div>
-              </>
-            ) : (
+        {/* Navigation */}
+        <nav aria-label="主選單" class="glass flex items-center gap-0.5 h-14 px-1.5 rounded-full min-w-0 overflow-x-auto">
+          {navItemsFor(user).map(({ key, label, Icon }) => {
+            const active = activeView === key;
+            return (
               <button
-                onClick={() => (currentView.value = 'month')}
-                class="bg-[#9e3526] hover:bg-[#71261b] text-white px-4 py-2.5 font-bold text-sm cursor-pointer border-none transition-colors"
+                key={key}
+                type="button"
+                onClick={() => (currentView.value = key)}
+                aria-current={active ? 'page' : undefined}
+                class={`flex items-center gap-[7px] h-11 px-4 rounded-full border-none cursor-pointer text-[15px] whitespace-nowrap transition-colors ${
+                  active
+                    ? 'bg-white/90 text-accent font-semibold shadow-[0_3px_8px_rgba(0,0,0,.12),0_1px_1px_rgba(0,0,0,.10)]'
+                    : 'bg-transparent text-black/80 font-medium hover:bg-white/50'
+                }`}
               >
-                同仁登入
+                <Icon size={17} strokeWidth={2} aria-hidden="true" />
+                <span class="hidden lg:inline">{label}</span>
+                <span class="lg:hidden sr-only">{label}</span>
               </button>
-            )}
-          </div>
+            );
+          })}
+        </nav>
+
+        {/* Account */}
+        <div class="flex items-center gap-2.5 flex-none">
+          {user ? (
+            <>
+              <button type="button" onClick={handleOpenNewReservation} class="btn btn-primary h-11 px-[18px] text-[15px]">
+                <Plus size={18} strokeWidth={2.4} aria-hidden="true" />
+                <span class="hidden xl:inline">新增預約</span>
+                <span class="xl:hidden sr-only">新增預約</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => (isAccountSheetOpen.value = true)}
+                aria-haspopup="dialog"
+                title="帳號設定"
+                class="glass flex items-center gap-2.5 h-14 pl-4 pr-2 rounded-full border-none cursor-pointer"
+              >
+                <span class="hidden lg:flex flex-col items-end">
+                  <span class="font-semibold text-sm leading-[18px] text-black">{user.name}</span>
+                  <span class="text-xs leading-4 text-label-2">
+                    {user.dept_name || user.dept_id} · {roleLabel(user.role)}
+                  </span>
+                </span>
+                <span class="avatar w-10 h-10 text-[15px]" aria-hidden="true">
+                  {avatarInitial(user.name)}
+                </span>
+                <span class="sr-only lg:hidden">{user.name} 帳號設定</span>
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={() => (currentView.value = 'month')} class="btn btn-primary h-11 px-5 text-[15px]">
+              同仁登入
+            </button>
+          )}
         </div>
       </div>
     </header>

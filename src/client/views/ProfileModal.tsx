@@ -65,31 +65,31 @@ export function ProfileModal() {
     >
       <form onSubmit={handleSave} class="flex flex-col gap-4">
         <div>
-          <label class="block font-bold text-xs text-[#444141] mb-1.5">工號 / 帳號</label>
+          <label class="field-label">工號 / 帳號</label>
           <input
             type="text"
             disabled
             value={user.id}
-            class="w-full p-3 border border-[#201e1d] bg-[#eae9e9] font-mono text-base text-[#605d5d]"
+            class="field font-mono"
           />
         </div>
         <div>
-          <label class="block font-bold text-xs text-[#444141] mb-1.5">姓名</label>
+          <label class="field-label">姓名</label>
           <input
             type="text"
             required
             value={name}
             onInput={(e) => setName((e.target as HTMLInputElement).value)}
-            class="w-full p-3 border border-[#201e1d] bg-white text-base outline-none focus:border-[#9e3526]"
+            class="field"
           />
         </div>
         <div>
-          <label class="block font-bold text-xs text-[#444141] mb-1.5">所屬科室</label>
+          <label class="field-label">所屬科室</label>
           <select
             required
             value={deptId}
             onChange={(e) => setDeptId((e.target as HTMLSelectElement).value)}
-            class="w-full p-3 border border-[#201e1d] bg-white text-base outline-none focus:border-[#9e3526]"
+            class="field"
           >
             <option value="">-- 請選擇科室 --</option>
             {options.map((d) => (
@@ -100,27 +100,27 @@ export function ProfileModal() {
           </select>
         </div>
         <div>
-          <label class="block font-bold text-xs text-[#444141] mb-1.5">分機號碼</label>
+          <label class="field-label">分機號碼</label>
           <input
             type="text"
             value={ext}
             onInput={(e) => setExt((e.target as HTMLInputElement).value)}
             placeholder="例如: 123"
-            class="w-full p-3 border border-[#201e1d] bg-white text-base outline-none focus:border-[#9e3526]"
+            class="field"
           />
         </div>
         <div>
-          <label class="block font-bold text-xs text-[#444141] mb-1.5">Email 信箱</label>
+          <label class="field-label">Email 信箱</label>
           <input
             type="email"
             value={email}
             onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
             placeholder="例如: user@ems.hccg.gov.tw"
-            class="w-full p-3 border border-[#201e1d] bg-white text-base outline-none focus:border-[#9e3526]"
+            class="field"
           />
         </div>
 
-        <div class="h-px bg-[#d7d3d3] mt-1"></div>
+        <div class="h-px bg-separator mt-1"></div>
 
         {/* Stacked and full-bleed on mobile per 手機版; the desktop dialog keeps the
             right-aligned pair. */}
@@ -128,14 +128,14 @@ export function ProfileModal() {
           <button
             type="button"
             onClick={() => (isProfileModalOpen.value = false)}
-            class="border border-[#201e1d] bg-white px-4 py-3.5 sm:py-2 font-semibold text-[#201e1d] text-left sm:text-center"
+            class="btn btn-plain btn-md"
           >
             取消
           </button>
           <button
             type="submit"
             disabled={saving}
-            class="bg-[#9e3526] hover:bg-[#71261b] disabled:bg-[#bab6b6] text-white px-4 py-3.5 sm:py-2 font-bold text-left sm:text-center"
+            class="btn btn-primary btn-md"
           >
             {saving ? '儲存中...' : '儲存變更'}
           </button>

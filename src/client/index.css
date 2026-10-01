@@ -1,79 +1,67 @@
 @import "tailwindcss";
 
 /* =============================================================================
-   Modernist Design System Tokens (改版設計.dc.html)
+   Liquid Glass (Liquid Glass 改版.dc.html, iOS 27 UI kit)
+
+   Light mode, System Blue accent, soft colour-field background. Navigation, filters,
+   drawers and action bars float as glass layers; content itself stays on a near-opaque
+   surface so table text never has to be read through blur.
    ============================================================================= */
 @theme {
   --font-sans:
-    "Archivo", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
-    system-ui, -apple-system, sans-serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang TC",
+    "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  --color-brick-primary: #9e3526;
-  --color-brick-dark: #71261b;
-  --color-brick-light: #fff2ef;
+  --color-accent: #0088ff;
+  --color-accent-ink: #0060c0;
+  --color-indigo: #6155f5;
+  --color-teal: #00c8b3;
+  --color-danger: #ff383c;
+  --color-danger-ink: #d70015;
+  --color-success: #34c759;
 
-  --color-ink-dark: #201e1d;
-  --color-ink-subtle: #605d5d;
-  --color-ink-muted: #7d7979;
-  --color-ink-placeholder: #9b9797;
-
-  --color-bg-canvas: #dedbd5;
-  --color-bg-card: #f3f2f2;
-  --color-bg-dim: #eae9e9;
-  --color-bg-today: #fff2ef;
-
-  /* Legacy brand compatibility mappings mapped to Brick Red / Ink */
-  --color-brand-50: #fff2ef;
-  --color-brand-100: #ffdcd6;
-  --color-brand-500: #9e3526;
-  --color-brand-600: #9e3526;
-  --color-brand-700: #71261b;
-  --color-brand-800: #541b12;
-
-  --radius-none: 0px;
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-
-  --shadow-rest: 0 1px 2px rgba(45, 43, 43, 0.14);
-  --shadow-raised: 0 12px 32px rgba(45, 43, 43, 0.22);
-  --shadow-overlay: 0 12px 32px rgba(45, 43, 43, 0.3);
+  --color-canvas: #eef1f6;
+  --color-label: #000000;
+  --color-label-2: rgba(60, 60, 67, 0.6);
+  --color-label-3: rgba(60, 60, 67, 0.3);
+  --color-fill: rgba(118, 118, 128, 0.12);
+  --color-fill-2: rgba(118, 118, 128, 0.08);
+  --color-separator: rgba(0, 0, 0, 0.1);
 }
 
 @layer base {
   body {
-    font-family: var(--font-sans);
-    font-size: 14px;
-    line-height: 1.6;
-    background-color: #dedbd5;
-    color: #201e1d;
-    -webkit-font-smoothing: antialiased;
     margin: 0;
-  }
-
-  strong, b, .font-bold {
-    font-weight: 700;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.45;
+    color: #000;
+    -webkit-font-smoothing: antialiased;
+    /* The colour field the glass layers refract. Fixed so it stays put behind long
+       tables instead of scrolling away and leaving the lower half flat grey. */
+    background-color: #eef1f6;
+    background-image:
+      radial-gradient(55% 60% at 8% 0%, rgba(0, 136, 255, 0.3), transparent 70%),
+      radial-gradient(45% 55% at 95% 10%, rgba(97, 85, 245, 0.22), transparent 70%),
+      radial-gradient(50% 50% at 70% 100%, rgba(0, 200, 179, 0.22), transparent 70%),
+      radial-gradient(40% 40% at 0% 100%, rgba(255, 45, 85, 0.1), transparent 70%);
+    background-attachment: fixed;
+    min-height: 100vh;
   }
 
   :focus-visible {
-    outline: 2px solid #9e3526;
+    outline: 2px solid #0088ff;
     outline-offset: 2px;
   }
 
-  /* Force sharp 0px radius on standard elements per Modernist spec */
-  button, input, select, textarea, div {
-    border-radius: 0px;
-  }
-
-  /* 手機版 (手機版.dc.html). iOS Safari zooms the viewport whenever a focused control
-     renders below 16px and never zooms back out, which strands the user mid-form. Several
-     admin dialogs set text-xs on their inputs, so the floor is enforced here rather than
-     at every call site. Matches Tailwind's md breakpoint. */
+  /* iOS Safari zooms the viewport whenever a focused control renders below 16px and
+     never zooms back out, which strands the user mid-form. Matches Tailwind's md. */
   @media (max-width: 767px) {
     input,
     select,
     textarea {
-      font-size: 16px;
+      font-size: 16px !important;
     }
   }
 
@@ -90,114 +78,519 @@
   }
 }
 
-/* Modernist Card & Container Component Styles */
-/* No background here on purpose. This rule is unlayered, so it outranks every Tailwind
-   utility (those live in @layer utilities) no matter what the markup asks for — a card
-   written as `class="mcard bg-[#9e3526]"` still came out #f3f2f2, which is how the public
-   schedule banner ended up rendering white text on a near-white panel. Every .mcard call
-   site sets its own bg-* utility, so the declaration was redundant as well as harmful. */
-.mcard {
-  border: 1px solid rgba(32, 30, 29, 0.35);
-  box-shadow: 0 1px 2px rgba(45, 43, 43, 0.14);
+/* ---- Surfaces --------------------------------------------------------------
+   Declared with @utility rather than inside @layer components so responsive variants
+   work on them: the login card is `md:glass-sheet`, a few phone-only controls are
+   `max-md:glass`. Tailwind v4 only generates variants for registered utilities. */
+
+/* Floating chrome: header pills, filter controls, tab bar. */
+@utility glass {
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 6px 20px rgba(0, 0, 0, 0.1),
+    0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-.mcell {
-  transition: transform 0.16s cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 0.16s cubic-bezier(0.4, 0, 0.2, 1),
-              background-color 0.16s;
+/* Raised layers that sit over content: drawers, dialogs, the login card. */
+@utility glass-sheet {
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: blur(40px) saturate(180%);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 24px 60px rgba(0, 0, 0, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-.mcell:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 32px rgba(45, 43, 43, 0.22);
-  background: #ffffff !important;
-  position: relative;
-  z-index: 2;
+/* Content. Near-opaque on purpose: tables and calendars are read, not glanced at. */
+@utility surface {
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.9),
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-/* Monospace Section Tracking Label.
-   Declared inside @layer components so a text-* utility can override the muted grey: the
-   label also sits on the brick-red banners, where #7d7979 lands at about 1.9:1. Unlayered,
-   this rule beat the `text-white/90` those banners already carried. */
+/* Everything below lives in @layer components so a Tailwind utility on the same element
+   still wins — `class="glass rounded-[20px]"` has to be able to override the radius. */
 @layer components {
-  .mono-label {
-    font-family: ui-monospace, Menlo, Monaco, "Cascadia Code", monospace;
-    font-weight: 700;
+  /* Inset grouped list (iOS Settings style) — rows separated by hairlines. */
+  .grouped {
+    background: rgba(255, 255, 255, 0.75);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .grouped > * + * {
+    box-shadow: inset 0 0.5px 0 rgba(0, 0, 0, 0.12);
+  }
+
+  /* ---- Buttons ------------------------------------------------------------- */
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: none;
+    border-radius: 999px;
+    font-family: inherit;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      transform 0.15s ease,
+      opacity 0.15s ease;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: #0088ff;
+    color: #fff;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.3),
+      0 8px 20px rgba(0, 136, 255, 0.28);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: #0077e0;
+  }
+
+  .btn-tinted {
+    background: rgba(118, 118, 128, 0.12);
+    color: #0088ff;
+  }
+  .btn-tinted:hover:not(:disabled) {
+    background: rgba(118, 118, 128, 0.2);
+  }
+
+  .btn-plain {
+    background: rgba(118, 118, 128, 0.12);
+    color: #000;
+    font-weight: 500;
+  }
+  .btn-plain:hover:not(:disabled) {
+    background: rgba(118, 118, 128, 0.2);
+  }
+
+  .btn-danger {
+    background: rgba(255, 56, 60, 0.12);
+    color: #ff383c;
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: rgba(255, 56, 60, 0.2);
+  }
+
+  .btn-danger-solid {
+    background: #ff383c;
+    color: #fff;
+  }
+  .btn-danger-solid:hover:not(:disabled) {
+    background: #e6262a;
+  }
+
+  /* Sizes */
+  .btn-sm {
+    height: 30px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+  .btn-md {
+    height: 40px;
+    padding: 0 16px;
+    font-size: 15px;
+  }
+  .btn-lg {
+    height: 50px;
+    padding: 0 24px;
+    font-size: 17px;
+  }
+  .btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    flex: none;
+  }
+  .btn-icon-lg {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    flex: none;
+  }
+
+  /* ---- Form controls -------------------------------------------------------- */
+
+  .field-label {
+    display: block;
+    margin: 0 0 6px 4px;
+    font-size: 13px;
+    font-weight: 400;
+    color: rgba(60, 60, 67, 0.6);
+  }
+
+  .field {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 44px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 12px;
+    background: rgba(118, 118, 128, 0.12);
+    color: #000;
+    font-family: inherit;
+    font-size: 17px;
+    outline: none;
+    transition: box-shadow 0.15s ease;
+  }
+  textarea.field {
+    padding: 11px 14px;
+    line-height: 1.4;
+    resize: vertical;
+  }
+  .field::placeholder {
+    color: rgba(60, 60, 67, 0.3);
+  }
+  .field:focus {
+    box-shadow: inset 0 0 0 2px #0088ff;
+  }
+  .field:disabled {
+    color: rgba(60, 60, 67, 0.6);
+    cursor: not-allowed;
+  }
+  .field-invalid,
+  .field-invalid:focus {
+    background: rgba(255, 56, 60, 0.1);
+    box-shadow: inset 0 0 0 1.5px rgba(255, 56, 60, 0.6);
+  }
+
+  /* Native selects keep their behaviour (and their accessible picker on a phone);
+     only the chrome is replaced, with the up/down chevron iOS uses for pop-up menus. */
+  select.field,
+  select.glass-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 38px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%233c3c43' stroke-opacity='.6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 15 5 5 5-5'/%3E%3Cpath d='m7 9 5-5 5 5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    cursor: pointer;
+  }
+
+  /* Glass pill filter control (search box, dropdown) for the floating filter rows. */
+  .glass-select,
+  .glass-input {
+    height: 40px;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 999px;
+    padding: 0 16px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    color: #000;
+    outline: none;
+    background-color: rgba(255, 255, 255, 0.62);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    box-shadow:
+      inset 0 0 0 0.5px rgba(255, 255, 255, 0.85),
+      0 4px 14px rgba(0, 0, 0, 0.06);
+  }
+  .glass-input {
+    font-weight: 400;
+  }
+  .glass-input::placeholder {
+    color: rgba(60, 60, 67, 0.6);
+  }
+  .glass-select:focus,
+  .glass-input:focus {
+    box-shadow:
+      inset 0 0 0 2px #0088ff,
+      0 4px 14px rgba(0, 0, 0, 0.06);
+  }
+  .glass-select.is-set {
+    color: #0060c0;
+    font-weight: 600;
+  }
+
+  /* Segmented control. Items mark the current one with aria-pressed or aria-selected. */
+  .segmented {
+    display: inline-flex;
+    box-sizing: border-box;
+    padding: 3px;
+    border-radius: 999px;
+    background: rgba(118, 118, 128, 0.12);
+  }
+  .segmented > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: none;
+    border-radius: 999px;
+    padding: 0 16px;
+    background: transparent;
+    color: #000;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+  .segmented > button[aria-pressed="true"],
+  .segmented > button[aria-selected="true"] {
+    background: #fff;
+    font-weight: 600;
+    box-shadow:
+      0 3px 8px rgba(0, 0, 0, 0.15),
+      0 1px 1px rgba(0, 0, 0, 0.16);
+  }
+
+  /* Toggle switch: <button role="switch" aria-checked> with the thumb drawn by ::after. */
+  .switch {
+    position: relative;
+    flex: none;
+    width: 52px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: rgba(120, 120, 128, 0.16);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow:
+      0 3px 8px rgba(0, 0, 0, 0.15),
+      0 1px 1px rgba(0, 0, 0, 0.16);
+    transition: transform 0.2s ease;
+  }
+  .switch[aria-checked="true"] {
+    background: #34c759;
+  }
+  .switch[aria-checked="true"]::after {
+    transform: translateX(24px);
+  }
+
+  /* Toggle chip (quick time slots, equipment). */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 34px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(118, 118, 128, 0.12);
+    color: #000;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+  .chip:hover:not(:disabled) {
+    background: rgba(118, 118, 128, 0.2);
+  }
+  .chip[aria-pressed="true"] {
+    background: rgba(0, 136, 255, 0.14);
+    color: #0060c0;
+    font-weight: 600;
+  }
+  .chip-solid[aria-pressed="true"] {
+    background: #0088ff;
+    color: #fff;
+  }
+  /* After the pressed rules on purpose: today's default slot can be both selected and
+     already past, and "unavailable" has to be what reads. */
+  .chip:disabled,
+  .chip-solid:disabled[aria-pressed="true"] {
+    background: rgba(118, 118, 128, 0.08);
+    color: rgba(60, 60, 67, 0.3);
+    font-weight: 500;
+    text-decoration: line-through;
+    cursor: not-allowed;
+  }
+
+  /* Room pill: colour comes from --room / --room-tint set inline per room. */
+  .room-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: var(--room-tint, rgba(118, 118, 128, 0.12));
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .room-pill::before {
+    content: "";
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--room, #8e8e93);
+  }
+
+  .role-pill {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 999px;
     font-size: 12px;
-    letter-spacing: 0.14em;
-    color: #7d7979;
-    text-transform: uppercase;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .role-superadmin {
+    background: rgba(0, 136, 255, 0.14);
+    color: #0060c0;
+  }
+  .role-admin {
+    background: rgba(97, 85, 245, 0.14);
+    color: #4b3fd1;
+  }
+  .role-staff {
+    background: rgba(118, 118, 128, 0.12);
+    color: rgba(0, 0, 0, 0.7);
+  }
+
+  .avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #aeaeb2, #8e8e93);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  /* ---- Tables --------------------------------------------------------------- */
+
+  .lg-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+  .lg-table th {
+    height: 44px;
+    padding: 0 16px;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(60, 60, 67, 0.6);
+    white-space: nowrap;
+  }
+  .lg-table td {
+    padding: 12px 16px;
+    border-top: 0.5px solid rgba(0, 0, 0, 0.1);
+    vertical-align: middle;
+  }
+  .lg-table th:first-child,
+  .lg-table td:first-child {
+    padding-left: 24px;
+  }
+  .lg-table th:last-child,
+  .lg-table td:last-child {
+    padding-right: 24px;
+  }
+  .lg-table tbody tr {
+    transition: background-color 0.15s ease;
+  }
+  .lg-table tbody tr:hover {
+    background: rgba(0, 136, 255, 0.04);
+  }
+
+  /* ---- Overlays ------------------------------------------------------------- */
+
+  .lg-scrim {
+    background: rgba(0, 0, 0, 0.18);
+  }
+
+  /* Plain dialog chrome shared by the admin console's forms and the Modal component.
+     A bottom sheet on a phone, a centred card above md. */
+  .lg-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.18);
+  }
+  .lg-dialog {
+    width: 100%;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+    border-radius: 32px 32px 0 0;
+  }
+  @media (min-width: 768px) {
+    .lg-overlay {
+      align-items: center;
+      padding: 16px;
+    }
+    .lg-dialog {
+      max-width: 28rem;
+      max-height: 90vh;
+      padding: 28px;
+      border-radius: 32px;
+    }
+  }
+
+  .lg-title-1 {
+    font-size: 34px;
+    line-height: 41px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .lg-eyebrow {
+    font-size: 15px;
+    font-weight: 600;
+    color: rgba(60, 60, 67, 0.6);
   }
 }
 
-/* Button & Badge Utilities */
-.btn-brick {
-  background-color: #9e3526;
-  color: #ffffff;
-  font-weight: 700;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-.btn-brick:hover {
-  background-color: #71261b;
-}
-
-.btn-outline-ink {
-  border: 1px solid #201e1d;
-  background-color: #ffffff;
-  color: #201e1d;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-.btn-outline-ink:hover {
-  background-color: #eae9e9;
-}
-
-/* Tags — mirrors .tag / .tag-* in the Modernist design system's styles.css.
-   Sized at 12px rather than the system's 11px to sit with this app's
-   scaled-up 公務版 type. */
-.mtag {
-  display: inline-flex;
-  align-items: center;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 3px 10px;
-}
-.mtag-accent { background-color: #fff2ef; color: #7c1405; }
-.mtag-accent-2 { background-color: #fff2ef; color: #71261b; }
-.mtag-neutral { background-color: #f8f4f4; color: #444141; }
-.mtag-ink { background-color: #201e1d; color: #ffffff; }
-
-/* Table styling */
-.mtable {
-  width: 100%;
-  border-collapse: collapse;
-  border: 1px solid rgba(32, 30, 29, 0.3);
-}
-.mtable th {
-  background-color: #eae9e9;
-  color: #201e1d;
-  font-weight: 700;
-  text-align: left;
-  border-bottom: 2px solid #201e1d;
-}
-.mtable td {
-  border-bottom: 1px solid rgba(32, 30, 29, 0.2);
-}
-
-/* Room category color tags with high contrast */
-.cat-1-badge { background-color: #eae9e9; border-left: 3px solid #201e1d; color: #201e1d; }
-.cat-2-badge { background-color: #f8f4f4; border-left: 3px solid #605d5d; color: #201e1d; }
-.cat-3-badge { background-color: #fff2ef; border-left: 3px solid #9e3526; color: #71261b; }
-.cat-4-badge { background-color: #f3f2f2; border-left: 3px solid #9b9797; color: #201e1d; }
-.cat-5-badge { background-color: #eae9e9; border-left: 3px solid #444141; color: #201e1d; }
-.cat-6-badge { background-color: #fff2ef; border-left: 3px solid #71261b; color: #71261b; }
-
 /* Scrollbars */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #eae9e9; }
-::-webkit-scrollbar-thumb { background: #9b9797; }
-::-webkit-scrollbar-thumb:hover { background: #605d5d; }
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(60, 60, 67, 0.25);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(60, 60, 67, 0.4);
+}

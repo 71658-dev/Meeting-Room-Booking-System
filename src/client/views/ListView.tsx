@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
+import { CalendarPlus, Copy, Pencil, Search, Trash2 } from 'lucide-preact';
 import { api } from '../api';
 import {
   reservations,
@@ -16,6 +17,7 @@ import {
 import { Reservation } from '../types';
 import { generateAndDownloadIcs } from '../lib/ics';
 import { isPastSlot } from '../../shared/time';
+import { roomStyle } from '../lib/roomColor';
 
 export function ListView() {
   const [loading, setLoading] = useState(false);
@@ -75,271 +77,222 @@ export function ListView() {
     }
   };
 
+  const handleEdit = (r: Reservation) => {
+    editingReservation.value = r;
+    isReservationModalOpen.value = true;
+  };
+
+  /** Row actions, shared by the desktop table and the phone cards. */
+  const actionsFor = (r: Reservation) => {
+    const canManage = !!currentUser.value && r.can_manage === true;
+    return [
+      { key: 'copy', label: '複製會議資訊', Icon: Copy, onClick: () => handleCopyInfo(r), danger: false, show: true },
+      { key: 'ics', label: '下載 .ics 行事曆', Icon: CalendarPlus, onClick: () => generateAndDownloadIcs(r), danger: false, show: true },
+      // Once the booking has started it is history: browse or cancel only.
+      { key: 'edit', label: '編輯預約', Icon: Pencil, onClick: () => handleEdit(r), danger: false, show: canManage && !isPastSlot(r.date, r.start_min) },
+      { key: 'cancel', label: '取消預約', Icon: Trash2, onClick: () => handleCancel(r), danger: true, show: canManage },
+    ].filter((a) => a.show);
+  };
+
+  const searchBox = (extra: string) => (
+    <label class={`glass-input flex items-center gap-2 cursor-text ${extra}`}>
+      <Search size={17} class="flex-none text-label-2" aria-hidden="true" />
+      <span class="sr-only">搜尋</span>
+      <input
+        type="search"
+        placeholder="搜尋事由、同仁、地點"
+        value={searchQuery.value}
+        onInput={(e) => (searchQuery.value = (e.target as HTMLInputElement).value)}
+        class="flex-1 min-w-0 bg-transparent border-none outline-none text-[15px] placeholder:text-label-2"
+      />
+    </label>
+  );
+
+  const roomSelect = (extra: string) => (
+    <select
+      aria-label="會議室篩選"
+      value={selectedRoomFilter.value}
+      onChange={(e) => (selectedRoomFilter.value = (e.target as HTMLSelectElement).value)}
+      class={`glass-select ${selectedRoomFilter.value ? 'is-set' : ''} ${extra}`}
+    >
+      <option value="">全部會議室</option>
+      {rooms.value.map((rm) => (
+        <option key={rm.id} value={rm.id}>
+          {rm.name}
+        </option>
+      ))}
+    </select>
+  );
+
+  const deptSelect = (extra: string) => (
+    <select
+      aria-label="科室篩選"
+      value={selectedDeptFilter.value}
+      onChange={(e) => (selectedDeptFilter.value = (e.target as HTMLSelectElement).value)}
+      class={`glass-select ${selectedDeptFilter.value ? 'is-set' : ''} ${extra}`}
+    >
+      <option value="">全部科室</option>
+      {departments.value.map((d) => (
+        <option key={d.id} value={d.name}>
+          {d.name}
+        </option>
+      ))}
+    </select>
+  );
+
   return (
-    <div class="max-w-[1400px] mx-auto p-0 md:p-8 min-h-[calc(100vh-5rem)]">
-      {/* Mobile search + filter rail. The selects scroll sideways as a chip row rather
-          than wrapping onto three lines. */}
-      <div class="md:hidden px-4 pt-5">
-        <input
-          type="text"
-          placeholder="🔍 搜尋事由、同仁、地點"
-          value={searchQuery.value}
-          onInput={(e) => (searchQuery.value = (e.target as HTMLInputElement).value)}
-          class="w-full border border-[#201e1d] bg-white px-3.5 py-2.5 font-normal text-base text-[#201e1d] outline-none placeholder-[#9b9797] mb-2.5"
-        />
-
-        <div class="flex gap-2 overflow-x-auto pb-3.5 border-b-2 border-[#201e1d] mb-4">
-          <select
-            value={selectedRoomFilter.value}
-            onChange={(e) => (selectedRoomFilter.value = (e.target as HTMLSelectElement).value)}
-            class={`flex-none border border-[#201e1d] px-3 py-2 font-semibold text-[13px] outline-none whitespace-nowrap ${
-              selectedRoomFilter.value ? 'bg-[#201e1d] text-white' : 'bg-white text-[#201e1d]'
-            }`}
-          >
-            <option value="">全部會議室</option>
-            {rooms.value.map((rm) => (
-              <option key={rm.id} value={rm.id}>
-                {rm.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedDeptFilter.value}
-            onChange={(e) => (selectedDeptFilter.value = (e.target as HTMLSelectElement).value)}
-            class={`flex-none border border-[#201e1d] px-3 py-2 font-semibold text-[13px] outline-none whitespace-nowrap ${
-              selectedDeptFilter.value ? 'bg-[#201e1d] text-white' : 'bg-white text-[#201e1d]'
-            }`}
-          >
-            <option value="">全部科室</option>
-            {departments.value.map((d) => (
-              <option key={d.id} value={d.name}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-
-          {currentUser.value && (
-            <button
-              type="button"
-              onClick={() => (onlyMineFilter.value = !onlyMineFilter.value)}
-              aria-pressed={onlyMineFilter.value}
-              class={`flex-none border border-[#201e1d] px-3 py-2 font-semibold text-[13px] whitespace-nowrap cursor-pointer ${
-                onlyMineFilter.value ? 'bg-[#201e1d] text-white' : 'bg-white text-[#201e1d]'
-              }`}
-            >
-              僅我的預約
-            </button>
-          )}
+    <div class="max-w-[1400px] mx-auto px-4 md:px-8 pt-2 md:pt-4 pb-8 min-h-[calc(100vh-88px)]">
+      {/* Title + filters */}
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-3 md:gap-4 mb-3 md:mb-4">
+        <div>
+          <div class="hidden md:block lg-eyebrow">共 {filtered.length} 筆預約紀錄</div>
+          <h1 class="m-0 lg-title-1">預約清單</h1>
         </div>
-      </div>
 
-      {/* Search & Filters Bar — desktop */}
-      <div class="hidden md:flex mcard p-5 mb-6 border border-[#201e1d] bg-[#f3f2f2] flex-wrap items-center justify-between gap-4">
-        <div class="flex flex-wrap items-center gap-3 text-sm">
-          <input
-            type="text"
-            placeholder="🔍 搜尋會議事由、同仁、地點..."
-            value={searchQuery.value}
-            onInput={(e) => (searchQuery.value = (e.target as HTMLInputElement).value)}
-            class="border border-[#201e1d] bg-white px-3.5 py-2 font-normal text-sm text-[#201e1d] w-64 outline-none placeholder-[#9b9797]"
-          />
-
-          <select
-            value={selectedRoomFilter.value}
-            onChange={(e) => (selectedRoomFilter.value = (e.target as HTMLSelectElement).value)}
-            class="border border-[#201e1d] bg-white px-3.5 py-2 font-medium text-sm text-[#201e1d] outline-none"
-          >
-            <option value="">全部會議室 ▾</option>
-            {rooms.value.map((rm) => (
-              <option key={rm.id} value={rm.id}>
-                {rm.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedDeptFilter.value}
-            onChange={(e) => (selectedDeptFilter.value = (e.target as HTMLSelectElement).value)}
-            class="border border-[#201e1d] bg-white px-3.5 py-2 font-medium text-sm text-[#201e1d] outline-none"
-          >
-            <option value="">全部科室 ▾</option>
-            {departments.value.map((d) => (
-              <option key={d.id} value={d.name}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-
+        <div class="hidden md:flex flex-wrap items-center gap-2.5">
+          {searchBox('w-[300px]')}
+          {roomSelect('')}
+          {deptSelect('')}
           {currentUser.value && (
-            <label class="flex items-center gap-2 border border-[#201e1d] bg-white px-3.5 py-2 font-bold text-sm cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={onlyMineFilter.value}
-                onChange={(e) => (onlyMineFilter.value = (e.target as HTMLInputElement).checked)}
-                class="w-4 h-4 accent-[#9e3526]"
-              />
-              僅看我的預約
-            </label>
+            <div class="glass-input flex items-center gap-2.5 pr-1.5 font-medium">
+              <span id="list-only-mine">僅看我的</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={onlyMineFilter.value}
+                aria-labelledby="list-only-mine"
+                onClick={() => (onlyMineFilter.value = !onlyMineFilter.value)}
+                class="switch"
+              ></button>
+            </div>
           )}
         </div>
 
-        <div class="font-bold text-sm text-[#605d5d]">
-          共 {filtered.length} 筆預約紀錄
-        </div>
-      </div>
-
-      {/* Mobile card list — the desktop table's eight columns do not survive a phone. */}
-      <div class="md:hidden px-4 pb-8 flex flex-col gap-3.5">
-        {filtered.length === 0 ? (
-          <div class="font-medium text-sm text-[#7d7979] py-8 text-center">
-            尚無符合條件的預約紀錄
+        {/* Phone: search, then a sideways-scrolling chip row */}
+        <div class="md:hidden">
+          {searchBox('w-full h-11 text-[17px]')}
+          <div class="flex gap-2 overflow-x-auto mt-3 -mx-4 px-4 pb-1">
+            {roomSelect('h-[34px] flex-none text-[15px] pl-3.5')}
+            {deptSelect('h-[34px] flex-none text-[15px] pl-3.5')}
+            {currentUser.value && (
+              <button
+                type="button"
+                onClick={() => (onlyMineFilter.value = !onlyMineFilter.value)}
+                aria-pressed={onlyMineFilter.value}
+                class={`chip chip-solid flex-none ${onlyMineFilter.value ? '' : 'glass'}`}
+              >
+                僅我的
+              </button>
+            )}
           </div>
+          <div class="text-[13px] text-label-2 mt-2 mx-1">共 {filtered.length} 筆</div>
+        </div>
+      </div>
+
+      {/* Phone cards — the desktop table's six columns do not survive a phone. */}
+      <div class="md:hidden flex flex-col gap-3">
+        {filtered.length === 0 ? (
+          <div class="surface rounded-[24px] px-4 py-8 text-center text-[15px] text-label-2">尚無符合條件的預約紀錄</div>
         ) : (
           filtered.map((r) => (
-            <div key={r.id} class="border border-[#201e1d]/30 bg-[#f3f2f2] p-3.5">
-              <div class="flex items-center justify-between mb-2 gap-2">
-                <span class="mtag mtag-accent-2 truncate">{r.room_name}</span>
-                <span class="font-semibold text-[13px] text-[#605d5d] flex-none">
-                  {r.headcount || 0} 人
+            <div key={r.id} class="surface rounded-[24px] px-4 py-3.5">
+              <div class="flex items-center justify-between gap-2 mb-1.5">
+                <span class="room-pill h-6 text-xs truncate" style={roomStyle(r.room_color)}>
+                  {r.room_name}
                 </span>
+                <span class="text-[13px] text-label-2 flex-none">{r.headcount || 0} 人</span>
               </div>
-
-              <div class="font-bold text-[17px] leading-snug text-[#201e1d]">{r.reason}</div>
-              <div class="font-medium text-sm leading-normal text-[#444141] mt-1">
-                {r.date} · {r.start_time} ~ {r.end_time}
+              <div class="text-[17px] leading-[22px] font-semibold">{r.reason}</div>
+              <div class="text-[15px] text-black/80 mt-0.5 tabular-nums">
+                {formatMd(r.date)} {formatWd(r.date)} · {r.start_time}–{r.end_time}
               </div>
-              <div class="font-normal text-[13px] leading-normal text-[#605d5d]">
+              <div class="text-[13px] text-label-2">
                 {r.dept_name} {r.user_name}（{r.user_id}）· 分機 {r.user_ext || '—'}
               </div>
-              {r.notes && (
-                <div class="font-normal text-[13px] leading-normal text-[#7d7979] mt-1">
-                  備註: {r.notes}
-                </div>
-              )}
+              {r.notes && <div class="text-[13px] text-label-2 mt-0.5">備註：{r.notes}</div>}
 
-              <div class="grid grid-cols-2 gap-2 mt-2.5">
-                <button
-                  onClick={() => handleCopyInfo(r)}
-                  class="border border-[#201e1d] bg-white py-2 font-semibold text-[13px] text-[#201e1d] cursor-pointer"
-                >
-                  複製
-                </button>
-                <button
-                  onClick={() => generateAndDownloadIcs(r)}
-                  class="border border-[#201e1d] bg-white py-2 font-semibold text-[13px] text-[#201e1d] cursor-pointer"
-                >
-                  .ics
-                </button>
-                {currentUser.value && r.can_manage === true && (
-                  <>
-                    {/* Once the booking has started it is history: browse or cancel only. */}
-                    {!isPastSlot(r.date, r.start_min) && (
-                      <button
-                        onClick={() => {
-                          editingReservation.value = r;
-                          isReservationModalOpen.value = true;
-                        }}
-                        class="border border-[#201e1d] bg-white py-2 font-semibold text-[13px] text-[#201e1d] cursor-pointer"
-                      >
-                        編輯
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleCancel(r)}
-                      class="bg-[#9e3526] text-white py-2 font-semibold text-[13px] border-none cursor-pointer"
-                    >
-                      取消
-                    </button>
-                  </>
-                )}
+              <div class="flex gap-1.5 mt-2.5">
+                {actionsFor(r).map(({ key, label, Icon, onClick, danger }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={onClick}
+                    aria-label={label}
+                    title={label}
+                    class={`btn flex-1 h-[34px] ${danger ? 'btn-danger' : 'btn-tinted'}`}
+                  >
+                    <Icon size={16} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                ))}
               </div>
             </div>
           ))
         )}
       </div>
 
-      {/* Modernist Table — desktop */}
-      <div class="hidden md:block mcard border border-[#201e1d] overflow-x-auto bg-[#f3f2f2]">
-        <table class="mtable w-full">
+      {/* Table — desktop */}
+      <div class="hidden md:block surface rounded-[28px] overflow-x-auto">
+        <table class="lg-table min-w-[900px]">
           <thead>
-            <tr class="bg-[#eae9e9]">
-              <th class="p-3.5 px-4 font-bold text-sm text-[#201e1d]">會議地點</th>
-              <th class="p-3.5 px-4 font-bold text-sm text-[#201e1d]">日期與時間</th>
-              <th class="p-3.5 px-4 font-bold text-sm text-[#201e1d]">會議事由</th>
-              <th class="p-3.5 px-4 font-bold text-sm text-[#201e1d]">登記科室 / 同仁（帳號・分機）</th>
-              <th class="p-3.5 px-4 font-bold text-sm text-[#201e1d] text-center">人數</th>
-              <th class="p-3.5 px-4 font-bold text-sm text-[#201e1d] text-right">操作</th>
+            <tr>
+              <th>會議地點</th>
+              <th>日期與時間</th>
+              <th>會議事由</th>
+              <th>登記科室 / 同仁</th>
+              <th class="text-center">人數</th>
+              <th class="text-right">操作</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-[#201e1d]/20 text-sm">
+          <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} class="text-center py-10 font-medium text-[#7d7979]">
+                <td colSpan={6} class="text-center py-10 text-label-2">
                   尚無符合條件的預約紀錄
                 </td>
               </tr>
             ) : (
               filtered.map((r) => (
-                <tr key={r.id} class="hover:bg-white transition-colors">
-                  <td class="p-3.5 px-4">
-                    <span class="mtag mtag-accent-2">{r.room_name}</span>
+                <tr key={r.id}>
+                  <td>
+                    <span class="room-pill" style={roomStyle(r.room_color)}>
+                      {r.room_name}
+                    </span>
                   </td>
-                  <td class="p-3.5 px-4 font-semibold text-[#201e1d]">
-                    <div>{r.date}</div>
-                    <div class="font-normal text-xs text-[#605d5d]">{r.start_time} – {r.end_time}</div>
-                  </td>
-                  <td class="p-3.5 px-4">
-                    <div class="font-bold text-[#201e1d]">{r.reason}</div>
-                    {r.notes && <div class="font-normal text-xs text-[#605d5d]">備註: {r.notes}</div>}
-                  </td>
-                  <td class="p-3.5 px-4">
-                    <div class="font-semibold text-[#201e1d]">{r.dept_name}</div>
-                    <div class="font-normal text-xs text-[#605d5d]">
-                      {r.user_name}（{r.user_id}）
+                  <td class="whitespace-nowrap">
+                    <div class="font-semibold tabular-nums">
+                      {formatMd(r.date)} {formatWd(r.date)}
                     </div>
-                    <div class="font-normal text-xs text-[#605d5d]">
-                      分機 {r.user_ext || '—'}
+                    <div class="text-[13px] text-label-2 tabular-nums">
+                      {r.start_time} – {r.end_time}
                     </div>
                   </td>
-                  <td class="p-3.5 px-4 text-center font-bold text-[#201e1d]">
-                    {r.headcount || 0}
+                  <td>
+                    <div class="font-semibold">{r.reason}</div>
+                    {r.notes && <div class="text-[13px] text-label-2">備註：{r.notes}</div>}
                   </td>
-                  <td class="p-3.5 px-4 text-right">
-                    <div class="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleCopyInfo(r)}
-                        class="border border-[#201e1d] bg-white px-2.5 py-1.5 font-semibold text-xs text-[#201e1d] hover:bg-[#eae9e9] cursor-pointer"
-                      >
-                        複製
-                      </button>
-                      <button
-                        onClick={() => generateAndDownloadIcs(r)}
-                        class="border border-[#201e1d] bg-white px-2.5 py-1.5 font-semibold text-xs text-[#201e1d] hover:bg-[#eae9e9] cursor-pointer"
-                      >
-                        .ics
-                      </button>
-                      {currentUser.value && r.can_manage === true && (
-                        <>
-                          {!isPastSlot(r.date, r.start_min) && (
-                            <button
-                              onClick={() => {
-                                editingReservation.value = r;
-                                isReservationModalOpen.value = true;
-                              }}
-                              class="border border-[#201e1d] bg-white px-2.5 py-1.5 font-semibold text-xs text-[#201e1d] hover:bg-[#eae9e9] cursor-pointer"
-                            >
-                              編輯
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleCancel(r)}
-                            class="bg-[#9e3526] hover:bg-[#71261b] text-white px-2.5 py-1.5 font-semibold text-xs border-none cursor-pointer"
-                          >
-                            取消
-                          </button>
-                        </>
-                      )}
+                  <td>
+                    <div>
+                      {r.dept_name} {r.user_name}
+                    </div>
+                    <div class="text-[13px] text-label-2">
+                      {r.user_id} · 分機 {r.user_ext || '—'}
+                    </div>
+                  </td>
+                  <td class="text-center tabular-nums">{r.headcount || 0}</td>
+                  <td>
+                    <div class="flex justify-end gap-1.5">
+                      {actionsFor(r).map(({ key, label, Icon, onClick, danger }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={onClick}
+                          aria-label={label}
+                          title={label}
+                          class={`btn btn-icon ${danger ? 'btn-danger' : 'btn-tinted'}`}
+                        >
+                          <Icon size={15} strokeWidth={2.2} aria-hidden="true" />
+                        </button>
+                      ))}
                     </div>
                   </td>
                 </tr>
@@ -350,4 +303,16 @@ export function ListView() {
       </div>
     </div>
   );
+}
+
+/** `2026-10-07` → `10/7`. The list is unfiltered and can span years, so another year keeps its prefix. */
+function formatMd(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const thisYear = new Date().getFullYear();
+  return y === thisYear ? `${m}/${d}` : `${y}/${m}/${d}`;
+}
+
+function formatWd(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return `週${'日一二三四五六'[new Date(y, m - 1, d).getDay()]}`;
 }

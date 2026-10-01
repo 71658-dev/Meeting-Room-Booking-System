@@ -1,29 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="會議室預約系統">
   <!--
-    Modernist mark: brick field, zero radius, two flat colours, no type.
+    Liquid Glass mark: System Blue squircle, white calendar, one day taken.
 
-    The header's brand mark (衛 on brick) is not reusable here — at 16px a 15-stroke
-    character collapses into a smudge. This keeps the same palette and the same flat,
-    square-cornered geometry and states the product instead: a calendar with one day
-    taken.
-
-    Deliberately only three shapes. An earlier draft drew the full 3x2 grid in a pale
-    tint, but at a 16px tab size the 1-unit gutters close up and a tint that light on
-    white disappears — all that detail cost nothing but blur. What survives scaling is
-    the silhouette (tabs + body), the header band, and one filled cell.
+    The header's brand mark (衛 on blue) is not reusable here — at 16px a 15-stroke
+    character collapses into a smudge. This keeps the header's colour and rounded tile
+    and states the product instead. Kept to a handful of shapes: at a 16px tab size
+    anything finer than the silhouette, the header band and one filled cell blurs out.
   -->
-  <rect width="32" height="32" fill="#9e3526"/>
+  <rect width="32" height="32" rx="8" fill="#0088FF"/>
 
   <!-- Binding tabs -->
-  <rect x="10" y="3" width="3" height="6" fill="#ffffff"/>
-  <rect x="19" y="3" width="3" height="6" fill="#ffffff"/>
+  <rect x="10" y="4" width="3" height="5" rx="1.5" fill="#ffffff"/>
+  <rect x="19" y="4" width="3" height="5" rx="1.5" fill="#ffffff"/>
 
   <!-- Calendar body -->
-  <rect x="4" y="6" width="24" height="23" fill="#ffffff"/>
+  <rect x="5" y="7" width="22" height="20" rx="3" fill="#ffffff"/>
 
-  <!-- Header band, knocked back to the brick field -->
-  <rect x="4" y="6" width="24" height="5" fill="#9e3526"/>
+  <!-- Header band -->
+  <rect x="5" y="7" width="22" height="5" fill="#0088FF" fill-opacity=".35"/>
 
   <!-- The booked day -->
-  <rect x="12" y="16" width="8" height="8" fill="#9e3526"/>
+  <rect x="12" y="16" width="8" height="7" rx="2" fill="#0088FF"/>
 </svg>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { api } from '../api';
+import { ShieldCheck, TriangleAlert } from 'lucide-preact';
 import { currentUser, currentView, showToast, isPasswordModalOpen } from '../state';
 
 export function LoginView() {
@@ -154,126 +155,115 @@ export function LoginView() {
   };
 
   return (
-    // Full-bleed on mobile: 手機版 gives the login screen the whole viewport with no card,
-    // no bar and no poster — the title block carries the branding instead.
-    <div class="min-h-screen md:min-h-[calc(100vh-5rem)] flex items-stretch md:items-center justify-center p-0 md:p-8 bg-[#f3f2f2] md:bg-[#dedbd5]">
-      <div class="md:mcard max-w-[1120px] w-full overflow-hidden md:border md:border-[#201e1d]/35 md:shadow-lg bg-[#f3f2f2]">
-        <div class="grid grid-cols-1 md:grid-cols-2 md:min-h-[620px]">
-          {/* Left Poster Banner (1a design) — desktop only */}
-          <div class="hidden md:flex bg-[#9e3526] text-white p-8 sm:p-11 flex-col justify-between gap-8">
-            <div class="mono-label text-white/90 text-xs tracking-[0.14em]">
-              HSINCHU CITY HEALTH BUREAU
-            </div>
-            <div>
-              <div class="font-extrabold text-5xl sm:text-[76px] leading-[0.95] tracking-tight">
-                會議室<br />預約系統
-              </div>
-              <div class="h-0.5 bg-white my-7 w-28"></div>
-              <div class="font-medium text-base sm:text-[17px] leading-[1.7] max-w-[34ch] text-white/95">
-                登入後可查詢空檔、發起預約、匯出行事曆。公開排程無需登入即可查看。
-              </div>
-            </div>
-            <div class="font-medium text-sm text-white/85">
-              v2.0 · 新竹市衛生局
-            </div>
+    // Desktop: brand copy beside a floating glass card (D1). Phone: the whole screen,
+    // with the app tile and title standing in for the copy column (M1).
+    <div class="min-h-screen md:min-h-[calc(100vh-88px)] flex items-stretch md:items-center justify-center gap-24 px-5 md:px-8 pt-12 pb-10 md:py-10">
+      {/* Brand copy — desktop */}
+      <div class="hidden lg:flex max-w-[420px] flex-col gap-4">
+        <div class="text-[15px] font-semibold text-accent">新竹市衛生局</div>
+        <div class="text-[56px] leading-[62px] font-bold tracking-[-0.01em]">
+          會議室
+          <br />
+          預約系統
+        </div>
+        <div class="text-[17px] leading-[26px] text-label-2">
+          登入後可查詢空檔、發起預約、匯出行事曆。公開排程無需登入即可查看。
+        </div>
+      </div>
+
+      <div class="w-full md:w-[420px] flex flex-col gap-6 md:gap-5 md:glass-sheet md:rounded-[32px] md:p-8">
+        {/* Phone title block */}
+        <div class="md:hidden flex flex-col gap-6">
+          <div class="w-[72px] h-[72px] rounded-[18px] bg-accent text-white text-[34px] font-bold flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,.35),0_10px_24px_rgba(0,136,255,.3)]">
+            衛
           </div>
-
-          {/* Right Login Form (1a design) / the whole screen on 手機版 */}
-          <div class="px-6 pt-7 pb-10 md:p-11 min-h-screen md:min-h-0 flex flex-col justify-center gap-6 md:gap-7 bg-[#f3f2f2]">
-            {/* Mobile title block — stands in for the desktop poster panel. */}
-            <div class="md:hidden">
-              <div class="mono-label text-[11px] normal-case">新竹市衛生局 · v2.0</div>
-              <h1 class="mt-3 mb-0 font-extrabold text-[34px] leading-[1.12] tracking-tight text-[#201e1d]">
-                會議室
-                <br />
-                預約系統
-              </h1>
-            </div>
-
-            <div class="hidden md:block">
-              <h2 class="m-0 font-extrabold text-3xl sm:text-[34px] leading-[1.2] text-[#201e1d]">
-                同仁登入
-              </h2>
-              <p class="mt-2.5 mb-0 font-normal text-base text-[#605d5d]">
-                請使用人事工號登入。連續失敗將暫時鎖定帳號。
-              </p>
-            </div>
-
-            <div class="h-0.5 bg-[#201e1d]/40"></div>
-
-            {errorMsg && (
-              <div class="p-3.5 bg-[#fff2ef] border-2 border-[#9e3526] text-[#71261b] text-sm font-semibold flex items-center gap-2">
-                <span>⚠️</span> {errorMsg}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} class="flex flex-col gap-5">
-              <div>
-                <label class="block font-bold text-xs tracking-wider text-[#444141] mb-2">
-                  工號 / 帳號
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={id}
-                  onInput={(e) => setId((e.target as HTMLInputElement).value)}
-                  class="w-full border md:border-2 border-[#201e1d] p-3.5 bg-white font-normal text-base text-[#201e1d] outline-none focus:border-[#9e3526]"
-                />
-              </div>
-
-              <div>
-                <label class="block font-bold text-xs tracking-wider text-[#444141] mb-2">
-                  密碼
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
-                  placeholder="請輸入登入密碼"
-                  class="w-full border md:border-2 border-[#201e1d] p-3.5 bg-white font-normal text-base text-[#201e1d] outline-none focus:border-[#9e3526]"
-                />
-              </div>
-
-              {turnstileSiteKey ? (
-                // The widget is a fixed 300px wide and does not scale down. The column's
-                // px-6 gutter plus this box's own padding left only 288px on a 360px
-                // phone, clipping it; below md the box therefore bleeds to the screen
-                // edges (-mx-6 cancels the gutter) so even a 320px viewport fits.
-                <div
-                  ref={turnstileBoxRef}
-                  id="turnstile-container"
-                  class="my-1 min-h-[65px] flex justify-center items-center border border-[#d7d3d3] bg-[#eae9e9] py-3 px-0 md:px-3 -mx-6 md:mx-0"
-                ></div>
-              ) : (
-                <div class="border border-[#d7d3d3] bg-[#eae9e9] p-4 text-sm text-[#605d5d]">
-                  Cloudflare Turnstile 人機驗證
-                </div>
-              )}
-
-              <div class="flex flex-col sm:flex-row gap-3 pt-1">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  class="bg-[#9e3526] hover:bg-[#71261b] text-white p-4 font-bold text-base border-none cursor-pointer text-left transition-colors flex-1"
-                >
-                  {loading ? '安全驗證中...' : '登入系統'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => (currentView.value = 'public')}
-                  class="border border-[#201e1d] bg-white text-[#201e1d] hover:bg-[#eae9e9] p-4 font-semibold text-base cursor-pointer text-left transition-colors"
-                >
-                  查看公開排程
-                </button>
-              </div>
-            </form>
-
-            <p class="m-0 font-normal text-xs text-[#7d7979] leading-relaxed">
-              公務安全提醒：請定期變更密碼，且勿將帳號借予他人使用。
+          <div>
+            <div class="text-[15px] font-semibold text-accent">新竹市衛生局 · v2.0</div>
+            <h1 class="m-0 lg-title-1">會議室預約系統</h1>
+            <p class="mt-1.5 mb-0 text-[15px] leading-5 text-label-2">
+              請使用人事工號登入。連續失敗將暫時鎖定帳號。
             </p>
           </div>
         </div>
+
+        <div class="hidden md:block">
+          <h2 class="m-0 text-[28px] leading-[34px] font-bold">同仁登入</h2>
+          <p class="mt-1.5 mb-0 text-[15px] leading-5 text-label-2">
+            請使用人事工號登入。連續失敗將暫時鎖定帳號。
+          </p>
+        </div>
+
+        {errorMsg && (
+          <div role="alert" class="flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-danger/10 text-[15px] font-semibold text-danger-ink">
+            <TriangleAlert size={18} class="flex-none mt-0.5 text-danger" aria-hidden="true" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} class="flex flex-col gap-5 flex-1 md:flex-none">
+          {/* Inset grouped fields: label and input share a row, iOS Settings style. */}
+          <div class="grouped max-md:glass max-md:rounded-[20px]">
+            <label class="flex items-center h-[52px] px-4 gap-3">
+              <span class="w-14 md:w-[76px] flex-none text-[17px]">工號</span>
+              <input
+                type="text"
+                required
+                autoComplete="username"
+                value={id}
+                onInput={(e) => setId((e.target as HTMLInputElement).value)}
+                placeholder="例如 30607"
+                class="flex-1 min-w-0 h-full bg-transparent border-none outline-none text-[17px] placeholder:text-label-3"
+              />
+            </label>
+            <label class="flex items-center h-[52px] px-4 gap-3">
+              <span class="w-14 md:w-[76px] flex-none text-[17px]">密碼</span>
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
+                placeholder="請輸入登入密碼"
+                class="flex-1 min-w-0 h-full bg-transparent border-none outline-none text-[17px] placeholder:text-label-3"
+              />
+            </label>
+          </div>
+
+          {turnstileSiteKey ? (
+            // The widget is a fixed 300px wide and does not scale down, so the box carries
+            // no horizontal padding: on a 320px phone the 20px gutters leave 280px, and
+            // the negative margin below md gives the widget the full screen width back.
+            <div
+              ref={turnstileBoxRef}
+              id="turnstile-container"
+              class="min-h-[65px] flex justify-center items-center rounded-2xl bg-fill py-2 -mx-5 md:mx-0"
+            ></div>
+          ) : (
+            <div class="h-[65px] rounded-2xl bg-fill flex items-center justify-center gap-2 text-[13px] text-label-2">
+              <ShieldCheck size={16} aria-hidden="true" />
+              Cloudflare Turnstile 人機驗證
+            </div>
+          )}
+
+          <div class="flex-1 md:hidden"></div>
+
+          <div class="flex flex-col gap-2.5">
+            <button type="submit" disabled={loading} class="btn btn-primary btn-lg w-full">
+              {loading ? '安全驗證中…' : '登入系統'}
+            </button>
+            <button
+              type="button"
+              onClick={() => (currentView.value = 'public')}
+              class="btn btn-tinted btn-lg w-full max-md:glass"
+            >
+              查看公開排程
+            </button>
+          </div>
+        </form>
+
+        <p class="m-0 text-xs leading-4 text-label-2 text-center">
+          公務安全提醒：請定期變更密碼，且勿將帳號借予他人使用。
+        </p>
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'preact/hooks';
+import { TriangleAlert } from 'lucide-preact';
 import { api } from '../api';
 import { reservations, rooms, departments } from '../state';
+import { roomColor } from '../lib/roomColor';
 
 export function StatsView() {
   const [loading, setLoading] = useState(false);
@@ -34,7 +36,9 @@ export function StatsView() {
 
   const totalBookings = reservations.value.length;
   let totalMinutes = 0;
-  const roomStats: Record<string, { name: string; count: number; minutes: number }> = {};
+  // colorKey comes off the reservation row rather than the rooms list, which omits
+  // deactivated rooms that still have bookings to count.
+  const roomStats: Record<string, { name: string; colorKey?: string; count: number; minutes: number }> = {};
   const deptStats: Record<string, number> = {};
 
   for (const r of reservations.value) {
@@ -43,7 +47,7 @@ export function StatsView() {
 
     const rName = r.room_name || r.room_id;
     if (!roomStats[r.room_id]) {
-      roomStats[r.room_id] = { name: rName, count: 0, minutes: 0 };
+      roomStats[r.room_id] = { name: rName, colorKey: r.room_color, count: 0, minutes: 0 };
     }
     roomStats[r.room_id].count++;
     roomStats[r.room_id].minutes += duration;
@@ -53,104 +57,78 @@ export function StatsView() {
   }
 
   const totalHours = (totalMinutes / 60).toFixed(1);
+  const deptRanking = Object.entries(deptStats).sort((a, b) => b[1] - a[1]);
+
+  const kpis = [
+    { label: '總預約筆數', value: String(totalBookings), unit: '筆', accent: false },
+    { label: '累計借用總時數', value: totalHours, unit: '小時', accent: true },
+    { label: '啟用會議室數', value: String(rooms.value.length), unit: '間', accent: false },
+  ];
 
   return (
-    <div class="max-w-[1400px] mx-auto px-4 py-5 md:p-8 min-h-[calc(100vh-5rem)]">
-      {/* Title — the desktop heading block; 手機版 gets its title from the ink bar. */}
-      <div class="hidden md:block pb-4 border-b-2 border-[#201e1d] mb-6">
-        <h2 class="m-0 font-extrabold text-3xl leading-tight text-[#201e1d]">會議室使用率統計分析</h2>
-        <p class="mt-1.5 mb-0 font-normal text-sm text-[#605d5d]">提供機關內部會議室使用趨勢與數據統計報表</p>
+    <div class="max-w-[1400px] mx-auto px-4 md:px-8 pt-2 md:pt-4 pb-8 min-h-[calc(100vh-88px)]">
+      <div class="mb-4 md:mb-5">
+        <div class="hidden md:block lg-eyebrow">提供機關內部會議室使用趨勢與數據統計報表</div>
+        <h1 class="m-0 lg-title-1">
+          <span class="hidden md:inline">會議室使用率統計分析</span>
+          <span class="md:hidden">使用統計</span>
+        </h1>
       </div>
 
       {truncated && (
-        <div class="border-2 border-[#9e3526] bg-[#fdf3f1] p-3 md:p-4 mb-5 md:mb-6">
-          <div class="font-bold text-sm text-[#9e3526]">統計資料未涵蓋全部預約</div>
-          <div class="font-normal text-[13px] leading-normal text-[#605d5d] mt-1">
-            預約筆數已達單次查詢上限，以下數字僅計入取回的部分。請縮小日期範圍後再看。
+        <div role="alert" class="flex items-start gap-3 rounded-[18px] bg-danger/10 px-4 py-3.5 mb-4 md:mb-5">
+          <TriangleAlert size={20} class="flex-none mt-px text-danger" aria-hidden="true" />
+          <div>
+            <div class="text-[15px] font-semibold text-danger-ink">統計資料未涵蓋全部預約</div>
+            <div class="text-[13px] leading-[18px] text-black/75 mt-0.5">
+              預約筆數已達單次查詢上限，以下數字僅計入取回的部分。請縮小日期範圍後再看。
+            </div>
           </div>
         </div>
       )}
 
-      {/* KPI Cards Grid */}
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-6 mb-6 md:mb-8">
-        <div class="md:mcard border border-[#201e1d] p-4 md:p-6 bg-[#f3f2f2]">
-          <div class="font-bold text-xs text-[#605d5d] tracking-wider uppercase">總預約筆數</div>
-          <div class="font-extrabold text-[32px] md:text-5xl leading-tight mt-1 md:mt-2 text-[#201e1d]">
-            {totalBookings} <span class="font-semibold text-sm md:text-base text-[#605d5d]">筆</span>
+      {/* KPI cards. The third drops on a phone, where two fit a row — the room count is
+          already plain from the ranking below. */}
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-5 mb-3 md:mb-5">
+        {kpis.map((k, i) => (
+          <div key={k.label} class={`glass rounded-[24px] md:rounded-[28px] p-4 md:p-6 ${i === 2 ? 'hidden md:block' : ''}`}>
+            <div class="text-[13px] md:text-[15px] font-semibold text-label-2">{k.label}</div>
+            <div
+              class={`text-[34px] leading-[41px] md:text-[56px] md:leading-[64px] font-bold tabular-nums ${
+                k.accent ? 'text-accent' : 'text-black'
+              }`}
+            >
+              {k.value}
+              <span class="text-[15px] md:text-[17px] font-medium text-label-2 ml-1 md:ml-1.5">{k.unit}</span>
+            </div>
           </div>
-        </div>
-
-        <div class="md:mcard border border-[#201e1d] p-4 md:p-6 bg-[#f3f2f2]">
-          <div class="font-bold text-xs text-[#605d5d] tracking-wider uppercase">累計借用總時數</div>
-          <div class="font-extrabold text-[32px] md:text-5xl leading-tight mt-1 md:mt-2 text-[#9e3526]">
-            {totalHours} <span class="font-semibold text-sm md:text-base text-[#605d5d]">小時</span>
-          </div>
-        </div>
-
-        <div class="md:mcard border border-[#201e1d] p-4 md:p-6 bg-[#f3f2f2]">
-          <div class="font-bold text-xs text-[#605d5d] tracking-wider uppercase">啟用會議室數</div>
-          <div class="font-extrabold text-[32px] md:text-5xl leading-tight mt-1 md:mt-2 text-[#201e1d]">
-            {rooms.value.length} <span class="font-semibold text-sm md:text-base text-[#605d5d]">間</span>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Breakdown Charts Grid. Below md the panels lose their frame and run as plain
-          sections — a bordered card inside a 16px gutter wastes most of the width. */}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-7 md:gap-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5">
         {/* Room breakdown */}
-        <div class="md:mcard md:border md:border-[#201e1d] md:p-6 md:bg-[#f3f2f2]">
-          <h3 class="m-0 mb-3.5 md:mb-4 pb-2.5 md:pb-3 border-b-2 border-[#201e1d] font-extrabold text-[15px] md:text-lg text-[#201e1d]">
-            各會議室使用頻率排行
-          </h3>
-          <div class="flex flex-col gap-3.5 md:gap-4">
-            {Object.values(roomStats).length === 0 ? (
-              <div class="font-normal text-sm text-[#7d7979] py-6 text-center">尚無預約數據</div>
+        <section class="surface rounded-[24px] md:rounded-[28px] p-4 md:p-6">
+          <h2 class="m-0 mb-3 md:mb-[18px] text-[17px] md:text-xl leading-[25px] font-semibold">各會議室使用頻率排行</h2>
+          <div class="flex flex-col gap-3 md:gap-[18px]">
+            {Object.keys(roomStats).length === 0 ? (
+              <div class="text-[15px] text-label-2 py-6 text-center">尚無預約數據</div>
             ) : (
-              Object.values(roomStats).map((st) => {
-                const percent = totalBookings > 0 ? Math.round((st.count / totalBookings) * 100) : 0;
-                return (
-                  <div key={st.name}>
-                    <div class="flex justify-between font-bold text-sm text-[#201e1d] mb-1.5">
-                      <span>{st.name}</span>
-                      <span class="text-[#605d5d]">{st.count} 筆 ({(st.minutes / 60).toFixed(1)} 小時)</span>
-                    </div>
-                    <div class="h-2.5 md:h-3 border border-[#201e1d] bg-white">
-                      <div
-                        class="h-full bg-[#9e3526]"
-                        style={{ width: `${percent}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Department breakdown */}
-        <div class="md:mcard md:border md:border-[#201e1d] md:p-6 md:bg-[#f3f2f2]">
-          <h3 class="m-0 mb-3.5 md:mb-4 pb-2.5 md:pb-3 border-b-2 border-[#201e1d] font-extrabold text-[15px] md:text-lg text-[#201e1d]">
-            科室借用排行分析
-          </h3>
-          <div class="flex flex-col gap-3.5 md:gap-4">
-            {Object.entries(deptStats).length === 0 ? (
-              <div class="font-normal text-sm text-[#7d7979] py-6 text-center">尚無預約數據</div>
-            ) : (
-              Object.entries(deptStats)
-                .sort((a, b) => b[1] - a[1])
-                .map(([deptName, count]) => {
-                  const percent = totalBookings > 0 ? Math.round((count / totalBookings) * 100) : 0;
+              Object.entries(roomStats)
+                .sort((a, b) => b[1].count - a[1].count)
+                .map(([roomId, st]) => {
+                  const percent = totalBookings > 0 ? Math.round((st.count / totalBookings) * 100) : 0;
                   return (
-                    <div key={deptName}>
-                      <div class="flex justify-between font-bold text-sm text-[#201e1d] mb-1.5">
-                        <span>{deptName}</span>
-                        <span class="text-[#9e3526]">{count} 筆</span>
+                    <div key={roomId}>
+                      <div class="flex justify-between gap-3 text-[15px] mb-1.5 md:mb-2">
+                        <span class="font-semibold">{st.name}</span>
+                        <span class="text-label-2 tabular-nums">
+                          {st.count} 筆 · {(st.minutes / 60).toFixed(1)} 小時
+                        </span>
                       </div>
-                      <div class="h-2.5 md:h-3 border border-[#201e1d] bg-white">
+                      <div class="h-2 md:h-2.5 rounded-full bg-fill overflow-hidden">
                         <div
-                          class="h-full bg-[#201e1d]"
-                          style={{ width: `${percent}%` }}
+                          class="h-full rounded-full"
+                          style={{ width: `${percent}%`, background: roomColor(st.colorKey).color }}
                         ></div>
                       </div>
                     </div>
@@ -158,7 +136,32 @@ export function StatsView() {
                 })
             )}
           </div>
-        </div>
+        </section>
+
+        {/* Department breakdown */}
+        <section class="surface rounded-[24px] md:rounded-[28px] p-4 md:p-6">
+          <h2 class="m-0 mb-3 md:mb-[18px] text-[17px] md:text-xl leading-[25px] font-semibold">科室借用排行分析</h2>
+          <div class="flex flex-col gap-2.5 md:gap-3.5">
+            {deptRanking.length === 0 ? (
+              <div class="text-[15px] text-label-2 py-6 text-center">尚無預約數據</div>
+            ) : (
+              deptRanking.map(([deptName, count]) => {
+                const percent = totalBookings > 0 ? Math.round((count / totalBookings) * 100) : 0;
+                return (
+                  <div key={deptName} class="grid grid-cols-[96px_1fr_40px] md:grid-cols-[120px_1fr_48px] items-center gap-2.5 md:gap-3 text-[15px]">
+                    <span class="truncate" title={deptName}>
+                      {deptName}
+                    </span>
+                    <div class="h-2 md:h-2.5 rounded-full bg-fill overflow-hidden">
+                      <div class="h-full rounded-full bg-accent" style={{ width: `${percent}%` }}></div>
+                    </div>
+                    <span class="text-right text-label-2 tabular-nums">{count} 筆</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

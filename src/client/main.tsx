@@ -6,6 +6,7 @@ import { currentUser, currentView } from './state';
 import { Header } from './components/Header';
 import { MobileNav } from './components/MobileNav';
 import { Toast } from './components/Toast';
+import { AccountSheet } from './components/AccountSheet';
 import { ProfileModal } from './views/ProfileModal';
 import { LoginView } from './views/LoginView';
 import { MonthView } from './views/MonthView';
@@ -39,10 +40,10 @@ function App() {
 
   if (initLoading) {
     return (
-      <div class="min-h-screen flex items-center justify-center bg-[#dedbd5]">
-        <div class="flex flex-col items-center gap-3">
-          <div class="w-10 h-10 border-4 border-[#9e3526] border-t-transparent animate-spin"></div>
-          <span class="text-xs font-bold text-[#605d5d]">系統載入中...</span>
+      <div class="min-h-screen flex items-center justify-center">
+        <div class="glass flex flex-col items-center gap-3 px-8 py-6 rounded-[28px]">
+          <div class="w-9 h-9 rounded-full border-[3px] border-accent border-t-transparent animate-spin"></div>
+          <span class="text-[13px] font-semibold text-label-2">系統載入中…</span>
         </div>
       </div>
     );
@@ -50,13 +51,16 @@ function App() {
 
   const user = currentUser.value;
   const view = currentView.value;
+  // Mirrors MobileNav's own early return: the login screen has no tab bar.
+  const showTabBar = !!user || view === 'public';
 
   return (
-    <div class="min-h-screen flex flex-col bg-[#dedbd5] text-[#201e1d]">
+    <div class="min-h-screen flex flex-col text-black">
       <Header />
       <MobileNav />
 
-      <main class="flex-1">
+      {/* Bottom padding below md keeps the last row clear of the floating tab bar. */}
+      <main class={`flex-1 ${showTabBar ? 'pb-28 md:pb-0' : ''}`}>
         {!user && view !== 'public' ? (
           <LoginView />
         ) : (
@@ -75,12 +79,11 @@ function App() {
       <ReservationModal />
       <PasswordChangeModal />
       <ProfileModal />
+      <AccountSheet />
 
-      <footer class="bg-[#f3f2f2] border-t-2 border-[#201e1d] py-3.5 sm:py-4 text-center text-[11px] sm:text-xs text-[#605d5d] mt-auto">
-        <div class="max-w-7xl mx-auto px-4 font-semibold leading-relaxed">
-          新竹市衛生局 版權所有 © 2026
-          <span class="hidden sm:inline"> Meeting Room Booking System v2.0 公務版</span>
-          <span class="sm:hidden"> · v2.0 公務版</span>
+      <footer class="hidden md:block py-5 text-center text-xs text-label-2">
+        <div class="max-w-[1400px] mx-auto px-8">
+          新竹市衛生局 版權所有 © 2026 · Meeting Room Booking System v2.0 公務版
         </div>
       </footer>
     </div>

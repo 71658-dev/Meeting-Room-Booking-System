@@ -15,14 +15,14 @@
        would mean carrying binaries that drift from this file whenever the mark changes.
        Add one only if a client that actually needs it turns up. -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <meta name="theme-color" content="#9e3526">
+  <meta name="theme-color" content="#eef1f6">
 
   <!-- No webfont CDN: the CSP allows font-src 'self' only, and a CJK webfont costs
-       several megabytes across its unicode-range subsets. index.css instead prefers a
-       locally installed Noto Sans TC and falls back to the platform Chinese face. -->
+       several megabytes across its unicode-range subsets. index.css instead uses the
+       platform face (SF / PingFang on Apple, Microsoft JhengHei on Windows). -->
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
-<body class="bg-[#dedbd5] text-[#201e1d] font-sans min-h-screen antialiased">
+<body class="font-sans min-h-screen antialiased">
   <div id="app"></div>
   <script type="module" src="./main.tsx"></script>
 </body>

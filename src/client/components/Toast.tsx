@@ -1,33 +1,37 @@
+import { CircleAlert, CircleCheck, Info, X } from 'lucide-preact';
 import { toast } from '../state';
 
+const ICONS = {
+  success: { Icon: CircleCheck, color: 'text-success' },
+  error: { Icon: CircleAlert, color: 'text-danger' },
+  info: { Icon: Info, color: 'text-accent' },
+};
+
+/**
+ * Glass notification pill. Sits above the mobile tab bar rather than over it, and in the
+ * bottom-right corner on desktop.
+ */
 export function Toast() {
   const currentToast = toast.value;
   if (!currentToast) return null;
 
-  // Modernist has no semantic green/red: the palette is ink plus one brick accent.
-  // Errors take the accent, everything else stays ink, and a flush-left rule
-  // carries the distinction instead of hue.
-  const bgStyles = {
-    success: 'bg-[#201e1d] text-white border-l-4 border-[#9e3526]',
-    error: 'bg-[#9e3526] text-white border-l-4 border-[#201e1d]',
-    info: 'bg-[#201e1d] text-white border-l-4 border-[#605d5d]',
-  };
+  const { Icon, color } = ICONS[currentToast.type];
 
   return (
     <div
-      role="alert"
+      role={currentToast.type === 'error' ? 'alert' : 'status'}
       aria-live="polite"
-      class={`fixed z-[70] bottom-4 left-4 right-4 md:left-auto md:bottom-5 md:right-5 px-4 py-3.5 flex items-center justify-between md:justify-start gap-3 font-bold text-sm shadow-[0_12px_32px_rgba(45,43,43,0.22)] ${
-        bgStyles[currentToast.type]
-      }`}
+      class="glass-sheet fixed z-[70] left-4 right-4 bottom-[calc(max(16px,env(safe-area-inset-bottom))+76px)] md:left-auto md:right-6 md:bottom-6 md:max-w-md flex items-center gap-3 pl-4 pr-2 py-2.5 rounded-[22px] font-semibold text-[15px] text-black"
     >
-      <span>{currentToast.message}</span>
+      <Icon size={22} class={`flex-none ${color}`} aria-hidden="true" />
+      <span class="flex-1 leading-snug">{currentToast.message}</span>
       <button
+        type="button"
         onClick={() => (toast.value = null)}
-        class="ml-2 text-white/70 hover:text-white p-0.5 border-none bg-transparent cursor-pointer font-bold"
+        class="btn btn-plain btn-icon w-8 h-8 text-label-2"
         aria-label="關閉通知"
       >
-        ✕
+        <X size={16} strokeWidth={2.4} aria-hidden="true" />
       </button>
     </div>
   );

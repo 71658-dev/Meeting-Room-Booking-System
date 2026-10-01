@@ -1,6 +1,7 @@
 import { ComponentChildren } from 'preact';
 import { createPortal } from 'preact/compat';
 import { useEffect, useId, useRef } from 'preact/hooks';
+import { X } from 'lucide-preact';
 
 interface ModalProps {
   isOpen: boolean;
@@ -80,7 +81,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'md', layer
 
   if (!isOpen) return null;
 
-  // Prefixed with `md:` because below that the dialog is a full-bleed sheet (手機版) —
+  // Prefixed with `md:` because below that the dialog is a bottom sheet (手機版) —
   // written out in full rather than composed at runtime so Tailwind's scanner sees them.
   const maxWidthMap = {
     sm: 'md:max-w-sm',
@@ -90,13 +91,13 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'md', layer
     '2xl': 'md:max-w-2xl',
   };
 
-  // Modernist dialog: ink-filled title bar (改版設計 option 1g), 2px ink border,
-  // zero radius, flat overlay. No blur or rounding — the system forbids both.
+  // Liquid Glass dialog: a glass sheet over a light scrim. Bottom sheet with a grabber on
+  // a phone, floating card above md.
   const overlay = (
     <div
       class={`fixed inset-0 ${
         layer === 'top' ? 'z-[60]' : 'z-50'
-      } overflow-y-auto bg-[#2d2b2b]/50 flex items-stretch md:items-center justify-center p-0 md:p-4`}
+      } overflow-y-auto lg-scrim flex items-end md:items-center justify-center p-0 md:p-4`}
       onClick={onClose}
     >
       <div
@@ -105,23 +106,26 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'md', layer
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        class={`bg-[#f3f2f2] w-full h-full md:h-auto ${maxWidthMap[maxWidth]} flex flex-col border-0 md:border-2 border-[#201e1d] overflow-hidden shadow-[0_12px_32px_rgba(45,43,43,0.3)] outline-none`}
+        class={`glass-sheet w-full max-h-[calc(100vh-48px)] md:max-h-[90vh] ${maxWidthMap[maxWidth]} flex flex-col rounded-t-[32px] md:rounded-[32px] overflow-hidden outline-none`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div class="flex-none px-5 md:px-6 py-4 bg-[#201e1d] flex items-center justify-between">
-          <h3 id={titleId} class="m-0 font-extrabold text-lg md:text-xl leading-tight text-white">
+        <div class="md:hidden w-9 h-[5px] rounded-full bg-label-3 mx-auto mt-2" aria-hidden="true"></div>
+        <div class="flex-none px-5 md:px-7 pt-4 md:pt-6 pb-2 flex items-center justify-between gap-3">
+          <h3 id={titleId} class="m-0 font-bold text-xl md:text-[22px] leading-tight text-black">
             {title}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            class="text-white/70 hover:text-white p-1 text-lg font-bold border-none bg-transparent cursor-pointer transition-colors"
+            class="btn btn-plain btn-icon w-9 h-9 text-label-2"
             aria-label="關閉對話視窗"
           >
-            ✕
+            <X size={18} strokeWidth={2.4} aria-hidden="true" />
           </button>
         </div>
-        <div class="flex-1 px-5 md:px-6 py-5 md:max-h-[82vh] overflow-y-auto">{children}</div>
+        <div class="flex-1 px-5 md:px-7 pt-2 pb-[calc(24px+env(safe-area-inset-bottom))] md:pb-7 overflow-y-auto">
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -130,9 +134,9 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'md', layer
   //
   // `position: fixed` resolves against the nearest ancestor that establishes a
   // containing block — which includes any ancestor carrying a transform, filter or
-  // backdrop-filter. Several wrappers here carry one (`.mcell`'s hover lift, the
-  // month view's sliding date panel), so a modal rendered inside them was laid out
-  // against that container and clipped inside it instead of covering the viewport.
+  // backdrop-filter. Several wrappers here carry one (the month view's sliding date
+  // drawer, every .glass / .glass-sheet layer), so a modal rendered inside them was laid
+  // out against that container and clipped inside it instead of covering the viewport.
   // Portalling to <body> makes the modal independent of wherever it is used.
   return createPortal(overlay, document.body);
 }

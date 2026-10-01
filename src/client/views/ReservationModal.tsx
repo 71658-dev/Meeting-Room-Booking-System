@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
+import { Check, Minus, Plus, TriangleAlert, X } from 'lucide-preact';
 import { api } from '../api';
 import {
   isReservationModalOpen,
@@ -12,6 +13,7 @@ import {
 } from '../state';
 import { Reservation } from '../types';
 import { Modal } from '../components/Modal';
+import { roomColor } from '../lib/roomColor';
 import { agencyToday, isPastSlot, timeStrToMin } from '../../shared/time';
 
 /** The `conflict` object a 409 carries, from both POST and PATCH /api/reservations. */
@@ -231,7 +233,7 @@ export function ReservationModal() {
     // the clash before submitting, so painting it as "規劃中" would hide exactly
     // what the user needs to see.
     if (occ && inPlanned) {
-      return { status: 'conflict', text: `⚠ 與「${occ.reason}」時段重疊` };
+      return { status: 'conflict', text: `與「${occ.reason}」時段重疊` };
     }
     if (occ) {
       return { status: 'occupied', text: `${occ.reason} (${occ.dept_name} ${occ.user_name})` };
@@ -242,322 +244,318 @@ export function ReservationModal() {
     return { status: 'free', text: '空閒' };
   };
 
+  const close = () => (isReservationModalOpen.value = false);
+  const timeInvalid = !!conflictError;
+  const roomTint = roomColor(selectedRoomObj?.color_key).color;
+
+  const OCC_STYLES: Record<string, { row: string; time: string; text: string; dot: string }> = {
+    free: { row: '', time: 'text-label-2', text: 'text-label-2 font-normal', dot: 'bg-[rgba(60,60,67,.18)]' },
+    planning: { row: 'bg-accent/[.08]', time: 'text-accent-ink', text: 'text-accent-ink font-semibold', dot: 'bg-accent' },
+    occupied: { row: '', time: 'text-label-2', text: 'text-black font-medium', dot: '' },
+    conflict: { row: 'bg-danger/10', time: 'text-danger-ink', text: 'text-danger-ink font-semibold', dot: 'bg-danger' },
+  };
+
+  const [, dm, dd] = date.split('-');
+  const shortDateLabel = dm && dd ? `${dm}/${dd}` : date;
+
   return (
     <>
     <div
-      onClick={() => (isReservationModalOpen.value = false)}
-      class="fixed inset-0 bg-[#2d2b2b]/50 z-50 flex items-stretch md:items-start justify-center p-0 md:p-8 overflow-y-auto"
+      onClick={close}
+      class="fixed inset-0 lg-scrim z-50 flex items-end md:items-start justify-center p-0 md:p-8 overflow-y-auto"
     >
-      {/* Full-bleed sheet below md (手機版 treats the form as its own screen), framed
-          dialog above it. */}
+      {/* Bottom sheet below md (M7), floating glass panel above it (D7). */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reservation-title"
         onClick={(e) => e.stopPropagation()}
-        class="w-full min-h-full md:min-h-0 md:max-w-[1040px] bg-[#f3f2f2] border-0 md:border-2 border-[#201e1d] shadow-2xl md:my-auto"
+        class="glass-sheet w-full mt-[62px] md:mt-0 md:max-w-[1040px] rounded-t-[38px] md:rounded-[36px] md:my-auto grid grid-cols-1 lg:grid-cols-[1fr_340px]"
       >
-        <div class="p-5 md:p-8 grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 md:gap-8">
-          {/* Left Form Column */}
-          <div class="lg:pr-8 lg:border-r-2 lg:border-[#201e1d]/40">
-            {/* Back affordance on a phone, close glyph on desktop. */}
-            <button
-              type="button"
-              onClick={() => (isReservationModalOpen.value = false)}
-              class="md:hidden bg-transparent border-none p-0 mb-4 font-semibold text-sm text-[#605d5d] cursor-pointer"
-            >
-              ← 返回
+        {/* Left: the form */}
+        <div class="px-4 md:px-8 pt-2 md:pt-7 pb-7 flex flex-col gap-[18px]">
+          <div class="md:hidden w-9 h-[5px] rounded-full bg-label-3 mx-auto" aria-hidden="true"></div>
+
+          <div class="flex items-center justify-between gap-3">
+            <button type="button" onClick={close} class="hidden md:inline-flex btn btn-plain h-9 px-4 text-[15px]">
+              取消
+            </button>
+            <button type="button" onClick={close} aria-label="取消" class="md:hidden btn btn-icon-lg bg-white/75 text-black/70 shadow-[0_2px_8px_rgba(0,0,0,.08)]">
+              <X size={20} strokeWidth={2.4} aria-hidden="true" />
             </button>
 
-            <div class="flex items-center justify-between">
+            <h2 id="reservation-title" class="m-0 text-[17px] font-semibold">
+              {editTarget ? '編輯會議室預約' : '發起會議室預約'}
+            </h2>
+
+            <button type="submit" form="reservation-form" disabled={loading} class="hidden md:inline-flex btn btn-primary h-9 px-[18px] text-[15px] shadow-none">
+              {loading ? '處置中…' : editTarget ? '儲存異動' : '確認預約'}
+            </button>
+            <button
+              type="submit"
+              form="reservation-form"
+              disabled={loading}
+              aria-label={editTarget ? '儲存異動' : '確認預約'}
+              class="md:hidden btn btn-primary btn-icon-lg shadow-none"
+            >
+              <Check size={22} strokeWidth={2.6} aria-hidden="true" />
+            </button>
+          </div>
+
+          {conflictError && (
+            <div role="alert" class="flex gap-3 items-start px-4 py-3.5 rounded-[18px] bg-danger/10">
+              <TriangleAlert size={20} class="flex-none mt-px text-danger" aria-hidden="true" />
               <div>
-                <div class="mono-label">NEW RESERVATION</div>
-                <h2 class="m-0 font-extrabold text-[26px] md:text-3xl leading-tight text-[#201e1d] mt-1">
-                  {editTarget ? '編輯會議室預約' : '發起會議室預約'}
-                </h2>
+                <div class="text-[15px] font-semibold text-danger-ink">時段衝突，預約尚未送出</div>
+                <div class="text-[13px] leading-[18px] text-black/75 mt-0.5">
+                  {conflictError} 您填寫的內容都還保留著，請改選其他時段或會議室。
+                </div>
               </div>
-              <span
-                onClick={() => (isReservationModalOpen.value = false)}
-                class="hidden md:inline font-bold text-2xl cursor-pointer text-[#605d5d] hover:text-[#201e1d]"
-              >
-                ✕
-              </span>
             </div>
+          )}
 
-            <div class="h-0.5 bg-[#201e1d] my-5"></div>
-
-            {conflictError && (
-              <div class="mb-5 p-4 bg-[#fff2ef] border-2 border-[#9e3526] text-[#71261b]">
-                <div class="font-bold text-base">時間衝突 (409 Conflict)</div>
-                <div class="font-normal text-sm mt-1">{conflictError}</div>
-                <div class="font-normal text-xs text-[#71261b]/80 mt-1">
-                  請參考右欄時間表改選其他時段或會議室。
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} class="flex flex-col gap-5 text-sm">
-              {/* Room & Date */}
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label class="block font-bold text-xs text-[#444141] mb-1.5">會議地點</label>
-                  <select
-                    required
-                    value={roomId}
-                    onChange={(e) => setRoomId((e.target as HTMLSelectElement).value)}
-                    class="w-full border border-[#201e1d] bg-white p-2.5 font-semibold text-sm outline-none"
-                  >
-                    {rooms.value.map((rm) => (
-                      <option key={rm.id} value={rm.id}>
-                        {rm.name} ({rm.capacity} 人)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label class="block font-bold text-xs text-[#444141] mb-1.5">預約日期</label>
-                  <input
-                    type="date"
-                    required
-                    value={date}
-                    min={today}
-                    onChange={(e) => setDate((e.target as HTMLInputElement).value)}
-                    class="w-full border border-[#201e1d] bg-white p-2.5 font-bold text-sm outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Quick Time Slots Grid */}
+          <form id="reservation-form" onSubmit={handleSubmit} class="flex flex-col gap-[18px]">
+            {/* Room & Date */}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label class="block font-bold text-xs text-[#444141] mb-2">快捷時段</label>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {quickSlots.map((slot) => {
-                    const isSelected = startTime === slot.start && endTime === slot.end;
-                    // On today's date the earlier slots have already gone by; showing them
-                    // as pickable only to reject the form on submit is worse than greying
-                    // them out here.
-                    const past = slotIsPast(slot.start);
-                    return (
-                      <button
-                        type="button"
-                        key={slot.label}
-                        disabled={past}
-                        title={past ? '此時段已過去' : undefined}
-                        onClick={() => handleShortcut(slot.start, slot.end)}
-                        class={`p-2.5 font-semibold text-xs border transition-colors text-center ${
-                          past
-                            ? 'bg-[#eae9e9] text-[#bab6b6] border-[#d7d3d3] cursor-not-allowed line-through'
-                            : isSelected
-                            ? 'bg-[#201e1d] text-white border-[#201e1d] font-bold cursor-pointer'
-                            : 'bg-white text-[#201e1d] border-[#201e1d] hover:bg-[#eae9e9] cursor-pointer'
-                        }`}
-                      >
-                        {slot.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Start & End Time */}
-              <div class="grid grid-cols-2 gap-4">
-                <div>
-                  <label class="block font-bold text-xs text-[#444141] mb-1.5">開始時間</label>
-                  <input
-                    type="time"
-                    required
-                    value={startTime}
-                    onChange={(e) => setStartTime((e.target as HTMLInputElement).value)}
-                    class="w-full border border-[#201e1d] bg-white p-2.5 font-semibold text-base outline-none"
-                  />
-                </div>
-                <div>
-                  <label class="block font-bold text-xs text-[#444141] mb-1.5">結束時間</label>
-                  <input
-                    type="time"
-                    required
-                    value={endTime}
-                    onChange={(e) => setEndTime((e.target as HTMLInputElement).value)}
-                    class="w-full border border-[#201e1d] bg-white p-2.5 font-semibold text-base outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Reason */}
-              <div>
-                <label class="block font-bold text-xs text-[#444141] mb-1.5">會議事由</label>
-                <input
-                  type="text"
+                <label for="rsv-room" class="field-label">會議地點</label>
+                <select
+                  id="rsv-room"
                   required
-                  placeholder="例如：局務會議、防疫跨科室協調會"
-                  value={reason}
-                  onInput={(e) => setReason((e.target as HTMLInputElement).value)}
-                  class="w-full border border-[#201e1d] bg-white p-2.5 font-normal text-sm outline-none placeholder-[#9b9797]"
+                  value={roomId}
+                  onChange={(e) => setRoomId((e.target as HTMLSelectElement).value)}
+                  class="field"
+                >
+                  {rooms.value.map((rm) => (
+                    <option key={rm.id} value={rm.id}>
+                      {rm.name}（{rm.capacity} 人）
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label for="rsv-date" class="field-label">預約日期</label>
+                <input
+                  id="rsv-date"
+                  type="date"
+                  required
+                  value={date}
+                  min={today}
+                  onChange={(e) => setDate((e.target as HTMLInputElement).value)}
+                  class="field tabular-nums"
                 />
               </div>
+            </div>
 
-              {/* Meeting Type & Headcount */}
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label class="block font-bold text-xs text-[#444141] mb-1.5">會議類型</label>
-                  <select
-                    value={meetingType}
-                    onChange={(e) => setMeetingType((e.target as HTMLSelectElement).value as any)}
-                    class="w-full border border-[#201e1d] bg-white p-2.5 font-medium text-sm outline-none"
-                  >
-                    <option value="internal">局內內部會議 ▾</option>
-                    <option value="external">跨機關/外部專家會議 ▾</option>
-                    <option value="department">科室內部討論 ▾</option>
-                    <option value="other">其他業務 ▾</option>
-                  </select>
-                </div>
+            {/* Quick time slots */}
+            <div>
+              <div class="field-label">快捷時段</div>
+              <div class="flex gap-2 overflow-x-auto md:flex-wrap -mx-4 px-4 md:mx-0 md:px-0">
+                {quickSlots.map((slot) => {
+                  const isSelected = startTime === slot.start && endTime === slot.end;
+                  // On today's date the earlier slots have already gone by; showing them
+                  // as pickable only to reject the form on submit is worse than greying
+                  // them out here.
+                  const past = slotIsPast(slot.start);
+                  return (
+                    <button
+                      type="button"
+                      key={slot.label}
+                      disabled={past}
+                      title={past ? '此時段已過去' : undefined}
+                      aria-pressed={isSelected}
+                      onClick={() => handleShortcut(slot.start, slot.end)}
+                      class={`chip flex-none ${past ? '' : 'chip-solid max-md:bg-white max-md:aria-pressed:bg-accent'}`}
+                    >
+                      {slot.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-                <div>
-                  <label class="block font-bold text-xs text-[#444141] mb-1.5">預估出席人數</label>
+            {/* Start, end, headcount */}
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div>
+                <label for="rsv-start" class="field-label">開始時間</label>
+                <input
+                  id="rsv-start"
+                  type="time"
+                  required
+                  value={startTime}
+                  aria-invalid={timeInvalid}
+                  onChange={(e) => setStartTime((e.target as HTMLInputElement).value)}
+                  class={`field tabular-nums ${timeInvalid ? 'field-invalid' : ''}`}
+                />
+              </div>
+              <div>
+                <label for="rsv-end" class="field-label">結束時間</label>
+                <input
+                  id="rsv-end"
+                  type="time"
+                  required
+                  value={endTime}
+                  aria-invalid={timeInvalid}
+                  onChange={(e) => setEndTime((e.target as HTMLInputElement).value)}
+                  class={`field tabular-nums ${timeInvalid ? 'field-invalid' : ''}`}
+                />
+              </div>
+              <div class="col-span-2 sm:col-span-1">
+                <label for="rsv-headcount" class="field-label">預估出席人數</label>
+                <div class="field flex items-center justify-between gap-2 pr-1.5">
                   <input
+                    id="rsv-headcount"
                     type="number"
                     min={1}
                     required
                     value={headcount}
                     onChange={(e) => setHeadcount(parseInt((e.target as HTMLInputElement).value, 10))}
-                    class="w-full border border-[#201e1d] bg-white p-2.5 font-medium text-sm outline-none"
+                    class="w-full min-w-0 bg-transparent border-none outline-none text-[17px] tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
+                  <span class="flex flex-none w-[92px] h-8 rounded-full bg-fill overflow-hidden">
+                    <button
+                      type="button"
+                      aria-label="減少人數"
+                      onClick={() => setHeadcount((h) => Math.max(1, (Number.isFinite(h) ? h : 1) - 1))}
+                      class="flex-1 flex items-center justify-center bg-transparent border-none cursor-pointer text-black"
+                    >
+                      <Minus size={16} strokeWidth={2.4} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="增加人數"
+                      onClick={() => setHeadcount((h) => (Number.isFinite(h) ? h : 0) + 1)}
+                      class="flex-1 flex items-center justify-center bg-transparent border-none cursor-pointer text-black shadow-[inset_.5px_0_0_rgba(0,0,0,.12)]"
+                    >
+                      <Plus size={16} strokeWidth={2.4} aria-hidden="true" />
+                    </button>
+                  </span>
                 </div>
               </div>
+            </div>
 
-              {/* Equipment Requirements */}
+            {/* Reason & type */}
+            <div class="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr] gap-3">
               <div>
-                <label class="block font-bold text-xs text-[#444141] mb-2">設備需求</label>
-                <div class="flex flex-wrap gap-2">
-                  {equipment.value.map((eq) => {
-                    const isChecked = selectedEqIds.includes(eq.id);
-                    return (
-                      <button
-                        type="button"
-                        key={eq.id}
-                        onClick={() => handleEquipmentToggle(eq.id)}
-                        class={`px-3 py-2 font-semibold text-xs border cursor-pointer transition-colors ${
-                          isChecked
-                            ? 'bg-[#201e1d] text-white border-[#201e1d]'
-                            : 'bg-white text-[#201e1d] border-[#201e1d] hover:bg-[#eae9e9]'
-                        }`}
-                      >
-                        {eq.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Notes & Attendees */}
-              <div>
-                <label class="block font-bold text-xs text-[#444141] mb-1.5">與會同仁 Email</label>
+                <label for="rsv-reason" class="field-label">會議事由</label>
                 <input
+                  id="rsv-reason"
                   type="text"
-                  placeholder="EXPERT@hospital.org.tw; citizen@gmail.com"
-                  value={attendeesEmail}
-                  onInput={(e) => setAttendeesEmail((e.target as HTMLInputElement).value)}
-                  class="w-full border border-[#201e1d] bg-white p-2.5 font-normal text-xs outline-none"
+                  required
+                  placeholder="例如：局務會議、防疫跨科室協調會"
+                  value={reason}
+                  onInput={(e) => setReason((e.target as HTMLInputElement).value)}
+                  class="field"
                 />
               </div>
-
               <div>
-                <label class="block font-bold text-xs text-[#444141] mb-1.5">備註說明</label>
+                <label for="rsv-type" class="field-label">會議類型</label>
+                <select
+                  id="rsv-type"
+                  value={meetingType}
+                  onChange={(e) => setMeetingType((e.target as HTMLSelectElement).value as any)}
+                  class="field"
+                >
+                  <option value="internal">局內內部會議</option>
+                  <option value="external">跨機關/外部專家會議</option>
+                  <option value="department">科室內部討論</option>
+                  <option value="other">其他業務</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Equipment */}
+            <div>
+              <div class="field-label">設備需求</div>
+              <div class="flex flex-wrap gap-2">
+                {equipment.value.map((eq) => {
+                  const isChecked = selectedEqIds.includes(eq.id);
+                  return (
+                    <button
+                      type="button"
+                      key={eq.id}
+                      aria-pressed={isChecked}
+                      onClick={() => handleEquipmentToggle(eq.id)}
+                      class="chip max-md:bg-white max-md:aria-pressed:bg-accent/[.14]"
+                    >
+                      {isChecked && <Check size={15} strokeWidth={2.6} aria-hidden="true" />}
+                      {eq.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Attendees, notes, notify */}
+            <div class="grouped max-md:bg-white">
+              <label class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-h-12 px-4 py-2.5 sm:py-0">
+                <span class="sm:w-[120px] flex-none text-[15px]">與會同仁 Email</span>
+                <input
+                  type="text"
+                  placeholder="expert@hospital.org.tw; …"
+                  value={attendeesEmail}
+                  onInput={(e) => setAttendeesEmail((e.target as HTMLInputElement).value)}
+                  class="flex-1 min-w-0 sm:h-12 bg-transparent border-none outline-none text-[15px] placeholder:text-label-3"
+                />
+              </label>
+              <label class="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-3 min-h-12 px-4 py-2.5 sm:py-3">
+                <span class="sm:w-[120px] flex-none text-[15px] sm:leading-6">備註說明</span>
                 <textarea
                   rows={2}
                   placeholder="選填，任何準備工作或提醒"
                   value={notes}
                   onInput={(e) => setNotes((e.target as HTMLTextAreaElement).value)}
-                  class="w-full border border-[#201e1d] bg-white p-2.5 font-normal text-xs outline-none"
+                  class="flex-1 min-w-0 bg-transparent border-none outline-none text-[15px] leading-6 resize-y placeholder:text-label-3 p-0"
                 ></textarea>
-              </div>
-
-              {/* Send Email Checkbox */}
-              <div>
-                <label class="flex items-center gap-2 font-semibold text-sm cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={sendEmail}
-                    onChange={(e) => setSendEmail((e.target as HTMLInputElement).checked)}
-                    class="w-4 h-4 accent-[#9e3526]"
-                  />
-                  發送 Email 通知信予與會人員
-                </label>
-              </div>
-
-              <div class="h-px bg-[#d7d3d3] my-1"></div>
-
-              {/* Actions */}
-              {/* Stacked and full-bleed on a phone — 手機版 runs both actions the full
-                  width of the screen, primary first. */}
-              <div class="flex flex-col md:flex-row gap-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  class="bg-[#9e3526] hover:bg-[#71261b] disabled:bg-[#bab6b6] text-white px-5 md:px-6 py-3.5 font-bold text-base border-none cursor-pointer text-left md:text-center"
-                >
-                  {loading ? '處置中...' : editTarget ? '儲存異動' : '確認預約'}
-                </button>
+              </label>
+              <div class="flex items-center justify-between gap-3 min-h-12 px-4">
+                <span id="rsv-send-email" class="text-[15px]">發送 Email 通知信予與會人員</span>
                 <button
                   type="button"
-                  onClick={() => (isReservationModalOpen.value = false)}
-                  class="border border-[#201e1d] bg-white text-[#201e1d] px-5 md:px-6 py-3.5 font-semibold text-base hover:bg-[#eae9e9] cursor-pointer text-left md:text-center"
-                >
-                  取消
-                </button>
+                  role="switch"
+                  aria-checked={sendEmail}
+                  aria-labelledby="rsv-send-email"
+                  onClick={() => setSendEmail(!sendEmail)}
+                  class="switch w-16"
+                ></button>
               </div>
-            </form>
-          </div>
+            </div>
+          </form>
+        </div>
 
-          {/* Right Column: Room Occupancy Schedule View */}
+        {/* Right: occupancy for the chosen room and date */}
+        <div class="px-4 md:px-6 pt-1 lg:pt-7 pb-7 lg:border-l-[0.5px] lg:border-separator flex flex-col gap-3">
           <div>
-            <div class="mono-label">
-              {selectedRoomObj?.name || '會議室'} · {date} 佔用情形
-            </div>
-            <div class="h-0.5 bg-[#201e1d] mt-3 mb-4"></div>
-
-            <div class="flex flex-col">
-              {hourBlocks.map((timeSlot) => {
-                const info = getSlotStatus(timeSlot);
-                return (
-                  <div
-                    key={timeSlot}
-                    class={`flex border-b border-[#201e1d]/20 ${
-                      info.status === 'conflict'
-                        ? 'bg-[#fff2ef] border-l-4 border-l-[#9e3526]'
-                        : info.status === 'planning'
-                        ? 'bg-[#eae9e9]'
-                        : info.status === 'occupied'
-                        ? 'bg-[#fff2ef]'
-                        : 'bg-transparent'
-                    }`}
-                  >
-                    <div
-                      class={`w-16 py-2.5 font-semibold text-xs flex-none ${
-                        info.status === 'conflict' ? 'pl-2 text-[#71261b]' : 'text-[#7d7979]'
-                      }`}
-                    >
-                      {timeSlot}
-                    </div>
-                    <div
-                      class={`flex-1 py-2.5 text-xs truncate ${
-                        info.status === 'conflict'
-                          ? 'font-bold text-[#71261b]'
-                          : 'font-medium text-[#201e1d]'
-                      }`}
-                    >
-                      {info.text}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div class="border border-[#9e3526] bg-[#fff2ef] p-3.5 mt-6 text-xs">
-              <div class="font-bold text-[#71261b]">衝突檢查在伺服器端執行</div>
-              <div class="font-normal text-[#71261b] mt-1 leading-relaxed">
-                送出時若與既有預約重疊，會回傳 409 並跳出提示視窗，同時在此處標示衝突時段。
-              </div>
+            <div class="text-[13px] font-semibold text-label-2">佔用情形</div>
+            <div class="flex items-center gap-2 text-xl leading-[25px] font-semibold">
+              <span class="w-2.5 h-2.5 rounded-full flex-none" style={{ background: roomTint }}></span>
+              {selectedRoomObj?.name || '會議室'} · {shortDateLabel}
             </div>
           </div>
+
+          <div class="rounded-[18px] bg-white/75 overflow-hidden">
+            {hourBlocks.map((timeSlot, idx) => {
+              const info = getSlotStatus(timeSlot);
+              const st = OCC_STYLES[info.status];
+              return (
+                <div
+                  key={timeSlot}
+                  class={`flex items-center gap-2.5 min-h-11 px-3.5 ${st.row} ${idx > 0 ? 'shadow-[inset_0_.5px_0_rgba(0,0,0,.08)]' : ''}`}
+                >
+                  <span class={`w-11 flex-none text-[13px] font-semibold tabular-nums ${st.time}`}>{timeSlot}</span>
+                  <span
+                    class={`w-2 h-2 rounded-full flex-none ${st.dot}`}
+                    style={info.status === 'occupied' ? { background: roomTint } : undefined}
+                  ></span>
+                  <span class={`text-[13px] truncate ${st.text}`}>{info.text}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <p class="m-0 px-1 text-xs leading-4 text-label-2">
+            衝突檢查在伺服器端執行。送出時若與既有預約重疊，會回傳 409 並跳出提示，同時在此標示衝突時段。
+          </p>
         </div>
       </div>
     </div>
@@ -575,39 +573,27 @@ export function ReservationModal() {
       layer="top"
     >
       <div class="flex flex-col gap-4">
-        <p class="m-0 font-semibold text-sm text-[#201e1d] leading-relaxed">
-          {conflictError}
-        </p>
+        <p class="m-0 text-[15px] font-semibold leading-relaxed">{conflictError}</p>
 
         {conflictInfo && (
-          <div class="border-l-4 border-[#9e3526] bg-[#fff2ef] p-4">
-            <div class="mono-label text-[#71261b]">既有預約</div>
-            <div class="font-extrabold text-lg text-[#201e1d] mt-1">
-              {conflictInfo.reason}
-            </div>
-            <div class="font-semibold text-sm text-[#444141] mt-1">
+          <div class="rounded-[18px] bg-danger/10 px-4 py-3.5">
+            <div class="text-[13px] font-semibold text-danger-ink">既有預約</div>
+            <div class="text-[17px] font-semibold mt-0.5">{conflictInfo.reason}</div>
+            <div class="text-[15px] text-black/75 mt-0.5 tabular-nums">
               {conflictInfo.date} {conflictInfo.startTime} – {conflictInfo.endTime}
               {conflictInfo.roomName ? ` · ${conflictInfo.roomName}` : ''}
             </div>
-            <div class="font-normal text-sm text-[#605d5d] mt-0.5">
-              登記人：{conflictInfo.userName}
-            </div>
+            <div class="text-[13px] text-label-2 mt-0.5">登記人：{conflictInfo.userName}</div>
           </div>
         )}
 
-        <p class="m-0 font-normal text-sm text-[#605d5d] leading-relaxed">
+        <p class="m-0 text-[15px] text-label-2 leading-relaxed">
           您填寫的內容都還保留著。請改選其他時段或會議室後重新送出，右欄的佔用時間表會標示可用的空檔。
         </p>
 
-        <div class="flex justify-end pt-1">
-          <button
-            type="button"
-            onClick={() => setIsConflictDialogOpen(false)}
-            class="bg-[#9e3526] hover:bg-[#71261b] text-white px-6 py-3 font-bold text-sm border-none cursor-pointer"
-          >
-            返回修改時段
-          </button>
-        </div>
+        <button type="button" onClick={() => setIsConflictDialogOpen(false)} class="btn btn-primary btn-lg w-full md:w-auto md:self-end">
+          返回修改時段
+        </button>
       </div>
     </Modal>
     </>
